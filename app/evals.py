@@ -23,6 +23,11 @@ class EvaluationSet(BaseModel):
     evaluations: list[Evaluation]
 
 
+class SemanticJudgeResult(BaseModel):
+    passed: bool
+    reason: str
+
+
 def _clean_assertion(value: str) -> str:
     return value.strip().strip("`").strip()
 
@@ -92,10 +97,42 @@ def generate_evaluations(req: GenerateEvalsRequest) -> GenerateEvalsResponse:
     return GenerateEvalsResponse(evaluations=evaluations, used_model=used_model)
 
 
+def _semantic_judge(
+    agent_output: str,
+    change: ChangeCard | None,
+    evaluation: Evaluation,
+) -> SemanticJudgeResult | None:
+    if not os.getenv("OPENAI_API_KEY") or change is None:
+        return None
+
+    client = OpenAI()
+    system = """
+Judge only whether the output is consistent with the current documented behavior.
+Ignore style and completeness.
+A legitimate historical mention of a former term is allowed.
+Fail only if the output presents obsolete behavior as current or contradicts the current docs.
+"""
+    context = {
+        "change": change.model_dump(),
+        "evaluation": evaluation.model_dump(),
+        "agent_output": agent_output,
+    }
+    response = client.responses.parse(
+        model=os.getenv("OPENAI_MODEL", "gpt-5.6"),
+        input=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": str(context)},
+        ],
+        text_format=SemanticJudgeResult,
+    )
+    return response.output_parsed
+
+
 def run_evaluations(
     repo_path: str,
     agent_script: str,
     evaluations: list[Evaluation],
+    change: ChangeCard | None,
     timeout_seconds: int,
 ) -> RunEvalsResponse:
     repo = resolve_repo(repo_path)
@@ -103,6 +140,7 @@ def run_evaluations(
 
     results: list[EvalResult] = []
     for evaluation in evaluations:
+        returncode_ok = False
         try:
             completed = subprocess.run(
                 [sys.executable, str(script), evaluation.prompt],
@@ -122,7 +160,8 @@ def run_evaluations(
                 s for s in evaluation.forbidden_substrings
                 if s.lower() in output_lower
             ]
-            passed = completed.returncode == 0 and not missing and not found
+            returncode_ok = completed.returncode == 0
+            passed = returncode_ok and not missing and not found
             error = None if completed.returncode == 0 else f"Exit code {completed.returncode}"
         except subprocess.TimeoutExpired:
             output = ""
@@ -137,6 +176,11 @@ def run_evaluations(
             passed = False
             error = str(exc)
 
+        judge_result = _semantic_judge(output, change, evaluation)
+        judge_passed = None if judge_result is None else judge_result.passed
+        judge_reason = None if judge_result is None else judge_result.reason
+        passed = returncode_ok and not missing and not found and judge_passed is not False
+
         results.append(
             EvalResult(
                 evaluation_id=evaluation.id,
@@ -145,6 +189,8 @@ def run_evaluations(
                 output=output[:6000],
                 missing_required=missing,
                 found_forbidden=found,
+                judge_passed=judge_passed,
+                judge_reason=judge_reason,
                 error=error,
             )
         )

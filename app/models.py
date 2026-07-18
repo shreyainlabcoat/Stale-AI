@@ -129,6 +129,8 @@ class EvalResult(BaseModel):
     output: str
     missing_required: list[str]
     found_forbidden: list[str]
+    judge_passed: bool | None = None
+    judge_reason: str | None = None
     error: str | None = None
 
 

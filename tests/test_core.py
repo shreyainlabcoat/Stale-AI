@@ -3,8 +3,9 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.analyzer import analyze
+from app.evals import run_evaluations
 from app.main import app
-from app.models import AnalyzeRequest
+from app.models import AnalyzeRequest, Evaluation
 from app.scanner import scan_repository
 from app.sources import content_sha, normalize
 
@@ -108,3 +109,32 @@ def test_check_source_reports_changed_state(monkeypatch, tmp_path):
     assert payload["changed"] is True
     assert payload["analysis"] is not None
     assert payload["analysis"]["change"]["new_behavior"]
+
+
+def test_run_evaluations_without_key_skips_semantic_judge(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    change = analyze(
+        AnalyzeRequest(
+            source_name="Current documentation",
+            old_text="Use alpha mode.",
+            new_text="Use beta mode.",
+            source_authority=0.9,
+        )
+    ).change
+    result = run_evaluations(
+        repo_path="sample_target",
+        agent_script="agent.py",
+        evaluations=[
+            Evaluation(
+                id="eval-1",
+                name="Smoke test",
+                prompt="Describe the current behavior.",
+                rationale="Ensures the agent runs without semantic judging.",
+            )
+        ],
+        change=change,
+        timeout_seconds=15,
+    )
+    assert len(result.results) == 1
+    assert result.results[0].judge_passed is None
+    assert result.results[0].judge_reason is None
