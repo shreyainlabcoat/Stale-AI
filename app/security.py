@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-ALLOWED_ROOT = Path(os.getenv("DRIFTFIX_ALLOWED_ROOT") or PROJECT_ROOT).resolve()
+ALLOWED_ROOT = Path(os.getenv("STALEAI_ALLOWED_ROOT") or PROJECT_ROOT).resolve()
 
 
 def resolve_repo(repo_path: str) -> Path:

@@ -26,7 +26,7 @@ from .scanner import scan_repository
 
 load_dotenv()
 
-app = FastAPI(title="DriftFix MVP", version="0.1.0")
+app = FastAPI(title="Stale AI", version="0.1.0")
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 

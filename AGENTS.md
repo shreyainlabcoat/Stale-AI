@@ -1,4 +1,4 @@
-# DriftFix development rules
+# Stale AI development rules
 
 - Keep the workflow deterministic wherever possible.
 - GPT output must be validated with Pydantic schemas.

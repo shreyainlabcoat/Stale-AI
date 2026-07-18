@@ -1,8 +1,8 @@
-# DriftFix MVP
+# Stale AI
 
 _because confidently outdated is still outdated_
 
-DriftFix converts a trusted documentation change into:
+Stale AI converts a trusted documentation change into:
 
 1. A structured change record
 2. A repository impact scan
@@ -14,7 +14,7 @@ The MVP is intentionally narrow: **developer documentation changes that can make
 
 ## Why the implementation is credible
 
-DriftFix does not let an LLM decide everything.
+Stale AI does not let an LLM decide everything.
 
 - `difflib` establishes the exact textual delta.
 - Repository scanning records exact file and line matches.
@@ -26,8 +26,9 @@ DriftFix does not let an LLM decide everything.
 
 ## Run
 
+From the project root:
+
 ```bash
-cd driftfix-mvp
 python -m venv .venv
 ```
 
@@ -79,7 +80,7 @@ python scripts/reset_sample.py
 
 ## Codex integration
 
-Install Codex CLI and authenticate it. DriftFix runs:
+Install Codex CLI and authenticate it. Stale AI runs:
 
 ```bash
 codex exec --ephemeral --sandbox workspace-write "<repair task>"
