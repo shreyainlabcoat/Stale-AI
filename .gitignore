@@ -198,6 +198,9 @@ Thumbs.db
 # Temporary file for partial code execution
 tempCodeRunnerFile.py
 
+# Local snapshot state
+data/snapshots.json
+
 # Ruff stuff:
 .ruff_cache/
 

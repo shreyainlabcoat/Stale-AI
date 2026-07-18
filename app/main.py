@@ -13,6 +13,7 @@ from .evals import generate_evaluations, run_evaluations
 from .models import (
     AnalyzeRequest,
     AnalyzeResponse,
+    CheckResponse,
     GenerateEvalsRequest,
     GenerateEvalsResponse,
     RepairRequest,
@@ -21,8 +22,11 @@ from .models import (
     RunEvalsResponse,
     ScanRequest,
     ScanResponse,
+    TrackRequest,
+    TrackResponse,
 )
 from .scanner import scan_repository
+from .sources import fetch, get_snapshot, put_snapshot
 
 load_dotenv()
 
@@ -44,6 +48,79 @@ def health() -> dict[str, str]:
 def analyze_route(req: AnalyzeRequest) -> AnalyzeResponse:
     try:
         return analyze(req)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/sources/track", response_model=TrackResponse)
+def track_source(req: TrackRequest) -> TrackResponse:
+    try:
+        fetched = fetch(req.url)
+        label = req.label or req.url
+        put_snapshot(
+            req.url,
+            label=label,
+            authority=req.authority,
+            text=fetched["text"],
+            sha=fetched["sha"],
+            fetched_at=fetched["fetched_at"],
+        )
+        return TrackResponse(
+            url=req.url,
+            label=label,
+            sha=fetched["sha"],
+            preview=fetched["text"][:500],
+            fetched_at=fetched["fetched_at"],
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/sources/check", response_model=CheckResponse)
+def check_source(req: TrackRequest) -> CheckResponse:
+    snapshot = get_snapshot(req.url)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="No tracked snapshot found for URL.")
+
+    try:
+        fetched = fetch(req.url)
+        old_sha = str(snapshot["sha"])
+        new_sha = fetched["sha"]
+        if old_sha == new_sha:
+            return CheckResponse(
+                changed=False,
+                url=req.url,
+                old_sha=old_sha,
+                new_sha=new_sha,
+                analysis=None,
+            )
+
+        analysis = analyze(
+            AnalyzeRequest(
+                source_name=str(snapshot["label"]),
+                source_url=req.url,
+                old_text=str(snapshot["text"]),
+                new_text=fetched["text"],
+                source_authority=float(snapshot["authority"]),
+            )
+        )
+        put_snapshot(
+            req.url,
+            label=str(snapshot["label"]),
+            authority=float(snapshot["authority"]),
+            text=fetched["text"],
+            sha=new_sha,
+            fetched_at=fetched["fetched_at"],
+        )
+        return CheckResponse(
+            changed=True,
+            url=req.url,
+            old_sha=old_sha,
+            new_sha=new_sha,
+            analysis=analysis,
+        )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -71,6 +148,7 @@ def run_evals_route(req: RunEvalsRequest) -> RunEvalsResponse:
             repo_path=req.repo_path,
             agent_script=req.agent_script,
             evaluations=req.evaluations,
+            change=req.change,
             timeout_seconds=req.timeout_seconds,
         )
     except ValueError as exc:

@@ -63,6 +63,28 @@ class ScanRequest(BaseModel):
     change: ChangeCard
 
 
+class TrackRequest(BaseModel):
+    url: str
+    label: str | None = None
+    authority: float = Field(default=0.9, ge=0, le=1)
+
+
+class TrackResponse(BaseModel):
+    url: str
+    label: str
+    sha: str
+    preview: str
+    fetched_at: str
+
+
+class CheckResponse(BaseModel):
+    changed: bool
+    url: str
+    old_sha: str
+    new_sha: str
+    analysis: "AnalyzeResponse | None" = None
+
+
 class ScanResponse(BaseModel):
     matches: list[RepoMatch]
     impacted_files: list[str]
@@ -96,6 +118,7 @@ class RunEvalsRequest(BaseModel):
     repo_path: str
     agent_script: str = "agent.py"
     evaluations: list[Evaluation]
+    change: ChangeCard | None = None
     timeout_seconds: int = Field(default=15, ge=1, le=60)
 
 
