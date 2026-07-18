@@ -71,7 +71,7 @@ def repair_with_codex(req: RepairRequest) -> RepairResponse:
     if not req.run_codex:
         return RepairResponse(
             status="plan_only",
-            message="Repair prompt generated. Codex execution was disabled.",
+            message="Proposed repair prompt generated for review. Codex execution was disabled.",
             codex_output=prompt,
             git_diff=_git_diff(repo),
         )
@@ -81,7 +81,7 @@ def repair_with_codex(req: RepairRequest) -> RepairResponse:
         return RepairResponse(
             status="codex_unavailable",
             message=(
-                "Codex CLI was not found. Install and authenticate Codex, then retry. "
+                "Codex CLI was not found. Install and authenticate Codex, then retry to generate a proposed patch. "
                 "The generated repair prompt is included below."
             ),
             codex_output=prompt,
@@ -117,9 +117,9 @@ def repair_with_codex(req: RepairRequest) -> RepairResponse:
     return RepairResponse(
         status=status,
         message=(
-            "Codex completed the repair workflow."
+            "Codex proposed a patch for review."
             if completed.returncode == 0
-            else f"Codex exited with code {completed.returncode}."
+            else f"Codex exited with code {completed.returncode} before producing a reviewable patch."
         ),
         codex_output=output[:30000],
         git_diff=_git_diff(repo),

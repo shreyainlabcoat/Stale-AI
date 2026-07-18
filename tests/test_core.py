@@ -20,7 +20,7 @@ def test_analyzer_detects_material_change(monkeypatch):
     new = (ROOT / "sample_target" / "docs_v3.txt").read_text()
     result = analyze(
         AnalyzeRequest(
-            source_name="Official SDK docs",
+            source_name="Current documentation",
             old_text=old,
             new_text=new,
             source_authority=0.95,
@@ -36,7 +36,7 @@ def test_scanner_finds_stale_reference(monkeypatch):
     new = (ROOT / "sample_target" / "docs_v3.txt").read_text()
     change = analyze(
         AnalyzeRequest(
-            source_name="Official SDK docs",
+            source_name="Current documentation",
             old_text=old,
             new_text=new,
             source_authority=0.95,

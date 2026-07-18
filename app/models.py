@@ -83,6 +83,8 @@ class CheckResponse(BaseModel):
     old_sha: str
     new_sha: str
     analysis: "AnalyzeResponse | None" = None
+    old_text: str | None = None
+    new_text: str | None = None
 
 
 class ScanResponse(BaseModel):

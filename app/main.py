@@ -93,6 +93,8 @@ def check_source(req: TrackRequest) -> CheckResponse:
                 old_sha=old_sha,
                 new_sha=new_sha,
                 analysis=None,
+                old_text=str(snapshot["text"]),
+                new_text=fetched["text"],
             )
 
         analysis = analyze(
@@ -118,6 +120,8 @@ def check_source(req: TrackRequest) -> CheckResponse:
             old_sha=old_sha,
             new_sha=new_sha,
             analysis=analysis,
+            old_text=str(snapshot["text"]),
+            new_text=fetched["text"],
         )
     except HTTPException:
         raise
