@@ -12,6 +12,14 @@ BREAKING_WORDS = {
     "removed", "remove", "deprecated", "deprecation", "breaking",
     "no longer", "replaced", "must", "required", "renamed", "migrate",
 }
+GENERIC_TERMS = {
+    "a", "an", "and", "api", "authenticate", "by", "call", "calls", "client",
+    "content", "create", "current", "dictionary", "for", "from", "get", "import",
+    "install", "later", "level", "message", "messages", "method", "methods",
+    "model", "module", "not", "now", "old", "on", "or", "plain", "read", "reply",
+    "response", "returned", "same", "setting", "style", "supported", "text",
+    "the", "to", "use", "with",
+}
 
 
 def _raw_diff(old_text: str, new_text: str) -> list[str]:
@@ -36,14 +44,32 @@ def _extract_codeish_terms(text: str) -> list[str]:
     patterns = [
         r"`([^`\n]{2,100})`",
         r"\b[A-Za-z_][A-Za-z0-9_.]*\([^)\n]{0,120}\)",
+        r"\b[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){1,}\b",
         r"\b[A-Za-z_][A-Za-z0-9_]{2,}\b",
     ]
     for pattern in patterns:
         for item in re.findall(pattern, text):
             normalized = item.strip()
-            if normalized and normalized not in terms:
+            if _is_useful_term(normalized) and normalized not in terms:
                 terms.append(normalized)
     return terms[:30]
+
+
+def _is_useful_term(term: str) -> bool:
+    cleaned = term.strip().strip("`").strip()
+    if not cleaned:
+        return False
+    lower = cleaned.lower()
+    if lower in GENERIC_TERMS:
+        return False
+    if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{2,}", cleaned):
+        if lower == cleaned and len(cleaned) < 6:
+            return False
+    if "." in cleaned or "(" in cleaned or "_" in cleaned:
+        return True
+    if any(char.isupper() for char in cleaned[1:]):
+        return True
+    return len(cleaned) >= 8
 
 
 def _heuristic(req: AnalyzeRequest) -> ChangeCard:

@@ -138,3 +138,28 @@ def test_run_evaluations_without_key_skips_semantic_judge(monkeypatch):
     assert len(result.results) == 1
     assert result.results[0].judge_passed is None
     assert result.results[0].judge_reason is None
+
+
+def test_fallback_analyzer_prefers_specific_terms(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    result = analyze(
+        AnalyzeRequest(
+            source_name="Current documentation",
+            old_text=(
+                "Set openai.api_key.\n"
+                "Use openai.ChatCompletion.create.\n"
+                'Read response["choices"][0]["message"]["content"].\n'
+            ),
+            new_text=(
+                "Create client = OpenAI().\n"
+                "Use client.chat.completions.create.\n"
+                "Read response.choices[0].message.content.\n"
+            ),
+            source_authority=0.95,
+        )
+    )
+    terms = set(result.change.deprecated_terms + result.change.replacement_terms)
+    assert "openai.ChatCompletion.create" in terms
+    assert "client.chat.completions.create" in terms
+    assert "api" not in terms
+    assert "the" not in terms

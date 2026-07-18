@@ -1,0 +1,20 @@
+OpenAI Python SDK
+
+Install:
+    pip install openai
+
+Create a client instead of setting a module level api key:
+    from openai import OpenAI
+    client = OpenAI()
+
+To get a chat completion, call the method on the client:
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": "Hello"}],
+    )
+
+Read the reply with attribute access:
+    text = response.choices[0].message.content
+
+If an older codebase still uses removed module level methods, update it
+to the client-based pattern before relying on the current SDK behavior.

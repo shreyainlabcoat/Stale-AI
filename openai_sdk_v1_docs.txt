@@ -1,0 +1,27 @@
+OpenAI Python SDK (v1.0.0 and later)
+
+Install:
+    pip install openai
+
+The module level methods openai.ChatCompletion and openai.Completion
+have been removed. Accessing openai.ChatCompletion now raises
+APIRemovedInV1: this is no longer supported in openai>=1.0.0.
+
+Create a client instead of setting a module level api key:
+    from openai import OpenAI
+    client = OpenAI()
+
+To get a chat completion, call the method on the client:
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": "Hello"}],
+    )
+
+Read the reply with attribute access, not dictionary keys:
+    text = response.choices[0].message.content
+
+To upgrade an existing codebase automatically, run:
+    openai migrate
+
+Or pin the old release with pip install openai==0.28 if you cannot
+upgrade yet.
