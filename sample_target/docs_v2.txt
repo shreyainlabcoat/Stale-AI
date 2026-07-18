@@ -1,0 +1,7 @@
+SDK v2
+
+To upload a public file, call:
+
+    upload(file, public=true)
+
+The upload() method accepts a boolean public parameter.

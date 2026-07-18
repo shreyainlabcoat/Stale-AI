@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DriftFix</title>
+  <style>
+    :root { font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #16181d; background: #f5f6f8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    header { background: #111318; color: white; padding: 24px max(24px, calc((100vw - 1180px)/2)); }
+    header h1 { margin: 0; font-size: 30px; }
+    header p { margin: 6px 0 0; color: #b8bec9; }
+    main { max-width: 1180px; margin: 24px auto; padding: 0 20px 60px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .card { background: white; border: 1px solid #dde1e7; border-radius: 14px; padding: 18px; margin-bottom: 16px; box-shadow: 0 4px 16px rgba(20,25,35,.04); }
+    h2 { margin: 0 0 12px; font-size: 18px; }
+    h3 { margin: 12px 0 6px; font-size: 14px; }
+    label { display: block; font-size: 13px; font-weight: 650; margin: 10px 0 5px; }
+    textarea, input { width: 100%; border: 1px solid #cfd5df; border-radius: 9px; padding: 10px; font: inherit; background: white; }
+    textarea { min-height: 190px; resize: vertical; }
+    button { border: 0; border-radius: 9px; padding: 10px 15px; font-weight: 700; cursor: pointer; background: #111318; color: white; margin: 10px 6px 0 0; }
+    button.secondary { background: #e9ecf1; color: #1b1e24; }
+    button:disabled { opacity: .5; cursor: wait; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #111318; color: #e7ecf4; border-radius: 10px; padding: 13px; max-height: 360px; overflow: auto; }
+    .metric-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .metric { background: #f0f2f5; border-radius: 9px; padding: 9px 12px; }
+    .metric b { display: block; font-size: 18px; }
+    .status { display: inline-block; padding: 5px 9px; border-radius: 999px; background: #eceff3; font-weight: 700; font-size: 12px; }
+    .pass { background: #dff7e9; color: #126436; }
+    .fail { background: #fde5e4; color: #8a211c; }
+    .hidden { display: none; }
+    .eval { border-top: 1px solid #e4e7ec; padding: 12px 0; }
+    .small { font-size: 12px; color: #687080; }
+    @media (max-width: 780px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<header>
+  <h1>DriftFix</h1>
+  <p>Turn documentation changes into agent regressions, evidence, and repairs.</p>
+</header>
+<main>
+  <section class="card">
+    <h2>1. Detect a material change</h2>
+    <div class="grid">
+      <div>
+        <label>Previous documentation</label>
+        <textarea id="oldText">SDK v2
+
+To upload a public file, call:
+upload(file, public=true)
+
+The upload() method accepts a boolean public parameter.</textarea>
+      </div>
+      <div>
+        <label>Current documentation</label>
+        <textarea id="newText">SDK v3
+
+The upload() method and public parameter have been removed.
+
+To upload a public file, call:
+files.create(file, visibility="public")
+
+Migrate all integrations to files.create().</textarea>
+      </div>
+    </div>
+    <label>Source name</label>
+    <input id="sourceName" value="Official SDK documentation" />
+    <button onclick="analyzeChange()">Analyze change</button>
+    <div id="analysisSection" class="hidden">
+      <h3>Change record</h3>
+      <div id="analysisMetrics" class="metric-row"></div>
+      <pre id="analysisOutput"></pre>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>2. Find affected agent components</h2>
+    <label>Repository path</label>
+    <input id="repoPath" value="sample_target" />
+    <button onclick="scanRepo()">Scan repository</button>
+    <div id="scanSection" class="hidden">
+      <div id="scanMetrics" class="metric-row"></div>
+      <pre id="scanOutput"></pre>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>3. Generate and run regression evaluations</h2>
+    <button onclick="generateEvals()">Generate evals</button>
+    <label>Agent script inside repository</label>
+    <input id="agentScript" value="agent.py" />
+    <button onclick="runEvals()">Run evals</button>
+    <div id="evalSection" class="hidden">
+      <div id="evalMetrics" class="metric-row"></div>
+      <div id="evalOutput"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>4. Repair with Codex</h2>
+    <p class="small">Codex edits only the selected repository using a workspace-write sandbox. Review its diff before accepting the patch.</p>
+    <button onclick="repair(true)">Run Codex repair</button>
+    <button class="secondary" onclick="repair(false)">Generate repair plan only</button>
+    <button class="secondary" onclick="resetSample()">Reset sample</button>
+    <pre id="repairOutput">No repair run yet.</pre>
+  </section>
+</main>
+
+<script>
+let analysis = null;
+let scan = null;
+let evaluations = [];
+let runResults = null;
+
+async function post(url, body) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(body)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || JSON.stringify(data));
+  return data;
+}
+
+function metric(label, value) {
+  return `<div class="metric"><span class="small">${label}</span><b>${value}</b></div>`;
+}
+
+async function analyzeChange() {
+  try {
+    analysis = await post("/api/analyze", {
+      source_name: document.getElementById("sourceName").value,
+      old_text: document.getElementById("oldText").value,
+      new_text: document.getElementById("newText").value,
+      source_authority: 0.95
+    });
+    document.getElementById("analysisSection").classList.remove("hidden");
+    document.getElementById("analysisMetrics").innerHTML =
+      metric("Decision", analysis.decision) +
+      metric("Score", analysis.danger_score) +
+      metric("Model", analysis.used_model ? "GPT-5.6" : "Fallback");
+    document.getElementById("analysisOutput").textContent =
+      JSON.stringify(analysis.change, null, 2);
+  } catch (e) { alert(e.message); }
+}
+
+async function scanRepo() {
+  if (!analysis) return alert("Analyze the change first.");
+  try {
+    scan = await post("/api/scan", {
+      repo_path: document.getElementById("repoPath").value,
+      change: analysis.change
+    });
+    document.getElementById("scanSection").classList.remove("hidden");
+    document.getElementById("scanMetrics").innerHTML =
+      metric("References", scan.reference_count) +
+      metric("Files", scan.impacted_files.length) +
+      metric("Adjusted score", scan.adjusted_score);
+    document.getElementById("scanOutput").textContent =
+      JSON.stringify(scan.matches, null, 2);
+  } catch (e) { alert(e.message); }
+}
+
+async function generateEvals() {
+  if (!analysis) return alert("Analyze the change first.");
+  try {
+    const result = await post("/api/generate-evals", {
+      change: analysis.change,
+      matches: scan ? scan.matches : [],
+      count: 3
+    });
+    evaluations = result.evaluations;
+    document.getElementById("evalSection").classList.remove("hidden");
+    document.getElementById("evalMetrics").innerHTML =
+      metric("Evaluations", evaluations.length) +
+      metric("Generator", result.used_model ? "GPT-5.6" : "Fallback");
+    document.getElementById("evalOutput").innerHTML = evaluations.map(e =>
+      `<div class="eval"><b>${e.name}</b><div>${e.prompt}</div>
+       <div class="small">Require: ${e.required_substrings.join(", ") || "none"} ·
+       Forbid: ${e.forbidden_substrings.join(", ") || "none"}</div></div>`
+    ).join("");
+  } catch (e) { alert(e.message); }
+}
+
+async function runEvals() {
+  if (!evaluations.length) return alert("Generate evaluations first.");
+  try {
+    runResults = await post("/api/run-evals", {
+      repo_path: document.getElementById("repoPath").value,
+      agent_script: document.getElementById("agentScript").value,
+      evaluations: evaluations,
+      timeout_seconds: 15
+    });
+    document.getElementById("evalSection").classList.remove("hidden");
+    document.getElementById("evalMetrics").innerHTML =
+      metric("Passed", runResults.passed) + metric("Failed", runResults.failed);
+    document.getElementById("evalOutput").innerHTML = runResults.results.map(r =>
+      `<div class="eval"><span class="status ${r.passed ? "pass" : "fail"}">${r.passed ? "PASS" : "FAIL"}</span>
+       <b> ${r.name}</b><pre>${escapeHtml(r.output)}</pre>
+       <div class="small">Missing: ${r.missing_required.join(", ") || "none"} ·
+       Forbidden found: ${r.found_forbidden.join(", ") || "none"} ${r.error || ""}</div></div>`
+    ).join("");
+  } catch (e) { alert(e.message); }
+}
+
+async function repair(runCodex) {
+  if (!analysis || !runResults) return alert("Analyze and run evaluations first.");
+  try {
+    const result = await post("/api/repair", {
+      repo_path: document.getElementById("repoPath").value,
+      change: analysis.change,
+      failures: runResults.results,
+      matches: scan ? scan.matches : [],
+      run_codex: runCodex
+    });
+    document.getElementById("repairOutput").textContent =
+      `${result.status}: ${result.message}\n\n${result.codex_output}\n\nDIFF\n${result.git_diff}`;
+  } catch (e) { alert(e.message); }
+}
+
+async function resetSample() {
+  await post("/api/reset-sample", {});
+  alert("Sample agent reset.");
+}
+
+function escapeHtml(value) {
+  return value.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]));
+}
+</script>
+</body>
+</html>

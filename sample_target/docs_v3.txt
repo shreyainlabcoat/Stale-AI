@@ -1,0 +1,9 @@
+SDK v3
+
+The upload() method and public parameter have been removed.
+
+To upload a public file, call:
+
+    files.create(file, visibility="public")
+
+Migrate all integrations to files.create().
