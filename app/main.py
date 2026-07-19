@@ -154,6 +154,7 @@ def run_evals_route(req: RunEvalsRequest) -> RunEvalsResponse:
             evaluations=req.evaluations,
             change=req.change,
             timeout_seconds=req.timeout_seconds,
+            runs_per_eval=req.runs_per_eval,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -169,7 +170,15 @@ def repair_route(req: RepairRequest) -> RepairResponse:
 
 @app.post("/api/reset-sample")
 def reset_sample() -> dict[str, str]:
-    source = PROJECT_ROOT / "sample_target" / "original_agent.py"
-    target = PROJECT_ROOT / "sample_target" / "agent.py"
-    shutil.copyfile(source, target)
+    shutil.copyfile(
+        PROJECT_ROOT / "sample_target" / "original_agent.py",
+        PROJECT_ROOT / "sample_target" / "agent.py",
+    )
+    openai_repo = PROJECT_ROOT / "sample_target_openai"
+    if openai_repo.exists():
+        shutil.copyfile(openai_repo / "original_agent.py", openai_repo / "agent.py")
+        shutil.copyfile(
+            openai_repo / "original_agent_notes.txt",
+            openai_repo / "agent_notes.txt",
+        )
     return {"status": "reset"}

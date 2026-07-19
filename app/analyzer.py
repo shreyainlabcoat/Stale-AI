@@ -153,7 +153,7 @@ CURRENT VERSION:
 {req.new_text}
 """
     response = client.responses.parse(
-        model=os.getenv("OPENAI_MODEL", "gpt-5.6"),
+        model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
         input=[
             {"role": "system", "content": system},
             {"role": "user", "content": user},

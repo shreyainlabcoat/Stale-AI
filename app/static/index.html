@@ -108,7 +108,7 @@
   <section class="card">
     <h2>2. Find affected agent components</h2>
     <label>Repository path</label>
-    <input id="repoPath" value="sample_target" />
+    <input id="repoPath" value="sample_target_openai" />
     <button onclick="scanRepo()">Scan repository</button>
     <div id="scanSection" class="hidden">
       <div id="scanMetrics" class="metric-row"></div>
@@ -121,6 +121,8 @@
     <button onclick="generateEvals()">Generate evals</button>
     <label>Agent script inside repository</label>
     <input id="agentScript" value="agent.py" />
+    <label>Trials per evaluation</label>
+    <input id="runsPerEval" type="number" min="1" max="10" step="1" value="3" />
     <button onclick="runEvals()">Run evals</button>
     <div id="evalSection" class="hidden">
       <div id="evalMetrics" class="metric-row"></div>
@@ -130,7 +132,7 @@
 
   <section class="card">
     <h2>4. Repair with Codex</h2>
-    <p class="small">Codex proposes a patch inside the selected repository using a workspace-write sandbox. Review the diff before accepting any change.</p>
+    <p class="small">Codex proposes a patch inside the selected repository using a workspace-write sandbox. For the bundled OpenAI migration demo, Stale AI can also apply a deterministic fallback repair when Codex is unavailable.</p>
     <button onclick="repair(true)">Run Codex repair</button>
     <button class="secondary" onclick="repair(false)">Generate repair plan only</button>
     <button class="secondary" onclick="resetSample()">Reset sample</button>
@@ -162,6 +164,9 @@ function metric(label, value) {
 function setAnalysis(nextAnalysis) {
   analysis = nextAnalysis;
   document.getElementById("analysisSection").classList.remove("hidden");
+  scan = null;
+  evaluations = [];
+  runResults = null;
   document.getElementById("analysisMetrics").innerHTML =
     metric("Decision", analysis.decision) +
     metric("Score", analysis.danger_score) +
@@ -278,15 +283,23 @@ async function runEvals() {
       agent_script: document.getElementById("agentScript").value,
       evaluations: evaluations,
       change: analysis.change,
-      timeout_seconds: 15
+      timeout_seconds: 15,
+      runs_per_eval: Number(document.getElementById("runsPerEval").value)
     });
     document.getElementById("evalSection").classList.remove("hidden");
     document.getElementById("evalMetrics").innerHTML =
-      metric("Passed", runResults.passed) + metric("Failed", runResults.failed);
+      metric("Passed", runResults.passed) +
+      metric("Failed", runResults.failed) +
+      metric("Pass rate", runResults.pass_rate) +
+      metric("Avg Brier", runResults.average_brier_score);
     document.getElementById("evalOutput").innerHTML = runResults.results.map(r =>
       `<div class="eval"><span class="status ${r.passed ? "pass" : "fail"}">${r.passed ? "PASS" : "FAIL"}</span>
        <b> ${r.name}</b><pre>${escapeHtml(r.output)}</pre>
-       <div class="small">Missing: ${r.missing_required.join(", ") || "none"} |
+       <div class="small">Trials: ${r.passed_runs}/${r.total_runs} |
+       Pass rate: ${r.pass_rate} |
+       Wilson: ${r.wilson_low}-${r.wilson_high} |
+       Brier: ${r.brier_score} |
+       Missing: ${r.missing_required.join(", ") || "none"} |
        Forbidden found: ${r.found_forbidden.join(", ") || "none"} |
        Judge: ${r.judge_passed === null ? "not run" : (r.judge_passed ? "pass" : "fail")} |
        Reason: ${escapeHtml(r.judge_reason || "n/a")} ${r.error || ""}</div></div>`

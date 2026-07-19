@@ -122,6 +122,7 @@ class RunEvalsRequest(BaseModel):
     evaluations: list[Evaluation]
     change: ChangeCard | None = None
     timeout_seconds: int = Field(default=15, ge=1, le=60)
+    runs_per_eval: int = Field(default=1, ge=1, le=10)
 
 
 class EvalResult(BaseModel):
@@ -133,12 +134,20 @@ class EvalResult(BaseModel):
     found_forbidden: list[str]
     judge_passed: bool | None = None
     judge_reason: str | None = None
+    passed_runs: int = 0
+    total_runs: int = 1
+    pass_rate: float = Field(default=0, ge=0, le=1)
+    wilson_low: float = Field(default=0, ge=0, le=1)
+    wilson_high: float = Field(default=0, ge=0, le=1)
+    brier_score: float = Field(default=0, ge=0, le=1)
     error: str | None = None
 
 
 class RunEvalsResponse(BaseModel):
     passed: int
     failed: int
+    pass_rate: float = Field(default=0, ge=0, le=1)
+    average_brier_score: float = Field(default=0, ge=0, le=1)
     results: list[EvalResult]
 
 

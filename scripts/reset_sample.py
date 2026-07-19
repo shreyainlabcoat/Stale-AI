@@ -6,4 +6,11 @@ shutil.copyfile(
     root / "sample_target" / "original_agent.py",
     root / "sample_target" / "agent.py",
 )
-print("Sample agent reset.")
+openai_root = root / "sample_target_openai"
+if openai_root.exists():
+    shutil.copyfile(openai_root / "original_agent.py", openai_root / "agent.py")
+    shutil.copyfile(
+        openai_root / "original_agent_notes.txt",
+        openai_root / "agent_notes.txt",
+    )
+print("Sample agents reset.")

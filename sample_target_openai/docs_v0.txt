@@ -1,0 +1,21 @@
+OpenAI Python SDK (v0.28)
+
+Install:
+    pip install openai==0.28
+
+Authenticate by setting the api key on the module:
+    import openai
+    openai.api_key = "sk-..."
+
+To get a chat completion, call the module level method:
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": "Hello"}],
+    )
+
+Read the reply from the returned dictionary:
+    text = response["choices"][0]["message"]["content"]
+
+For plain text completions, use openai.Completion.create in the same
+module level style. The ChatCompletion and Completion methods are the
+supported way to call the API.

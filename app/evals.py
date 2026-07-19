@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import os
-import re
 import subprocess
 import sys
-from pathlib import Path
+
 from openai import OpenAI
 from pydantic import BaseModel
 
@@ -17,6 +16,7 @@ from .models import (
     RunEvalsResponse,
 )
 from .security import resolve_inside_repo, resolve_repo
+from .stats import brier_score_binary, wilson_interval
 
 
 class EvaluationSet(BaseModel):
@@ -81,7 +81,7 @@ Each evaluation must:
         "requested_count": req.count,
     }
     response = client.responses.parse(
-        model=os.getenv("OPENAI_MODEL", "gpt-5.6"),
+        model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
         input=[
             {"role": "system", "content": system},
             {"role": "user", "content": str(context)},
@@ -118,7 +118,7 @@ Fail only if the output presents obsolete behavior as current or contradicts the
         "agent_output": agent_output,
     }
     response = client.responses.parse(
-        model=os.getenv("OPENAI_MODEL", "gpt-5.6"),
+        model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
         input=[
             {"role": "system", "content": system},
             {"role": "user", "content": str(context)},
@@ -134,70 +134,103 @@ def run_evaluations(
     evaluations: list[Evaluation],
     change: ChangeCard | None,
     timeout_seconds: int,
+    runs_per_eval: int,
 ) -> RunEvalsResponse:
     repo = resolve_repo(repo_path)
     script = resolve_inside_repo(repo, agent_script)
 
     results: list[EvalResult] = []
     for evaluation in evaluations:
-        returncode_ok = False
-        try:
-            completed = subprocess.run(
-                [sys.executable, str(script), evaluation.prompt],
-                cwd=repo,
-                capture_output=True,
-                text=True,
-                timeout=timeout_seconds,
-                check=False,
-            )
-            output = (completed.stdout + "\n" + completed.stderr).strip()
-            output_lower = output.lower()
-            missing = [
-                s for s in evaluation.required_substrings
-                if s.lower() not in output_lower
-            ]
-            found = [
-                s for s in evaluation.forbidden_substrings
-                if s.lower() in output_lower
-            ]
-            returncode_ok = completed.returncode == 0
-            passed = returncode_ok and not missing and not found
-            error = None if completed.returncode == 0 else f"Exit code {completed.returncode}"
-        except subprocess.TimeoutExpired:
-            output = ""
-            missing = evaluation.required_substrings
-            found = []
-            passed = False
-            error = "Timed out"
-        except OSError as exc:
-            output = ""
-            missing = evaluation.required_substrings
-            found = []
-            passed = False
-            error = str(exc)
+        attempts: list[dict[str, object]] = []
+        for _ in range(runs_per_eval):
+            returncode_ok = False
+            try:
+                completed = subprocess.run(
+                    [sys.executable, str(script), evaluation.prompt],
+                    cwd=repo,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout_seconds,
+                    check=False,
+                )
+                output = (completed.stdout + "\n" + completed.stderr).strip()
+                output_lower = output.lower()
+                missing = [
+                    s for s in evaluation.required_substrings
+                    if s.lower() not in output_lower
+                ]
+                found = [
+                    s for s in evaluation.forbidden_substrings
+                    if s.lower() in output_lower
+                ]
+                returncode_ok = completed.returncode == 0
+                error = None if completed.returncode == 0 else f"Exit code {completed.returncode}"
+            except subprocess.TimeoutExpired:
+                output = ""
+                missing = evaluation.required_substrings
+                found = []
+                error = "Timed out"
+            except OSError as exc:
+                output = ""
+                missing = evaluation.required_substrings
+                found = []
+                error = str(exc)
 
-        judge_result = _semantic_judge(output, change, evaluation)
-        judge_passed = None if judge_result is None else judge_result.passed
-        judge_reason = None if judge_result is None else judge_result.reason
-        passed = returncode_ok and not missing and not found and judge_passed is not False
+            judge_result = _semantic_judge(output, change, evaluation)
+            judge_passed = None if judge_result is None else judge_result.passed
+            judge_reason = None if judge_result is None else judge_result.reason
+            passed = returncode_ok and not missing and not found and judge_passed is not False
+            attempts.append(
+                {
+                    "passed": passed,
+                    "output": output[:6000],
+                    "missing_required": missing,
+                    "found_forbidden": found,
+                    "judge_passed": judge_passed,
+                    "judge_reason": judge_reason,
+                    "error": error,
+                }
+            )
+
+        passed_runs = sum(1 for attempt in attempts if bool(attempt["passed"]))
+        pass_rate = round(passed_runs / runs_per_eval, 3)
+        wilson_low, wilson_high = wilson_interval(passed_runs, runs_per_eval)
+        brier_score = brier_score_binary(pass_rate, 1.0)
+        first = attempts[0]
 
         results.append(
             EvalResult(
                 evaluation_id=evaluation.id,
                 name=evaluation.name,
-                passed=passed,
-                output=output[:6000],
-                missing_required=missing,
-                found_forbidden=found,
-                judge_passed=judge_passed,
-                judge_reason=judge_reason,
-                error=error,
+                passed=passed_runs == runs_per_eval,
+                output=str(first["output"]),
+                missing_required=list(first["missing_required"]),
+                found_forbidden=list(first["found_forbidden"]),
+                judge_passed=first["judge_passed"],
+                judge_reason=first["judge_reason"],
+                passed_runs=passed_runs,
+                total_runs=runs_per_eval,
+                pass_rate=pass_rate,
+                wilson_low=wilson_low,
+                wilson_high=wilson_high,
+                brier_score=brier_score,
+                error=first["error"],
             )
         )
 
     passed_count = sum(1 for r in results if r.passed)
+    overall_pass_rate = round(
+        sum(result.passed_runs for result in results) / max(1, len(results) * runs_per_eval),
+        3,
+    )
+    average_brier_score = round(
+        sum(result.brier_score for result in results) / max(1, len(results)),
+        3,
+    )
     return RunEvalsResponse(
         passed=passed_count,
         failed=len(results) - passed_count,
+        pass_rate=overall_pass_rate,
+        average_brier_score=average_brier_score,
         results=results,
     )

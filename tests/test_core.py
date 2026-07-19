@@ -3,9 +3,10 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.analyzer import analyze
+from app.codex_runner import repair_with_codex
 from app.evals import run_evaluations
 from app.main import app
-from app.models import AnalyzeRequest, Evaluation
+from app.models import AnalyzeRequest, Evaluation, RepairRequest
 from app.scanner import scan_repository
 from app.sources import content_sha, normalize
 
@@ -134,10 +135,13 @@ def test_run_evaluations_without_key_skips_semantic_judge(monkeypatch):
         ],
         change=change,
         timeout_seconds=15,
+        runs_per_eval=2,
     )
     assert len(result.results) == 1
     assert result.results[0].judge_passed is None
     assert result.results[0].judge_reason is None
+    assert result.results[0].total_runs == 2
+    assert 0 <= result.results[0].pass_rate <= 1
 
 
 def test_fallback_analyzer_prefers_specific_terms(monkeypatch):
@@ -163,3 +167,34 @@ def test_fallback_analyzer_prefers_specific_terms(monkeypatch):
     assert "client.chat.completions.create" in terms
     assert "api" not in terms
     assert "the" not in terms
+
+
+def test_demo_repair_fallback_updates_openai_sample(monkeypatch, tmp_path):
+    from app import security
+
+    repo = tmp_path / "sample_target_openai"
+    repo.mkdir()
+    (repo / "agent_notes.txt").write_text("legacy", encoding="utf-8")
+    (repo / "docs_v1.txt").write_text("current notes", encoding="utf-8")
+    (repo / "agent.py").write_text("old agent", encoding="utf-8")
+    (repo / "repaired_agent.py").write_text("new agent", encoding="utf-8")
+    monkeypatch.setattr(security, "ALLOWED_ROOT", tmp_path.resolve())
+    monkeypatch.setattr("app.codex_runner.shutil.which", lambda _: None)
+
+    result = repair_with_codex(
+        RepairRequest(
+            repo_path=str(repo),
+            change=analyze(
+                AnalyzeRequest(
+                    source_name="Current documentation",
+                    old_text="old",
+                    new_text="new",
+                )
+            ).change,
+            failures=[],
+            run_codex=True,
+        )
+    )
+    assert result.status == "patched"
+    assert (repo / "agent_notes.txt").read_text(encoding="utf-8") == "current notes"
+    assert (repo / "agent.py").read_text(encoding="utf-8") == "new agent"

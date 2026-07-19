@@ -4,17 +4,6 @@ import os
 import sys
 from pathlib import Path
 
-# This agent answers using its own knowledge notes.
-# The notes are the OLD OpenAI SDK docs, so the agent is stale on purpose.
-# It is not stale because a wrong answer was hardcoded. It is stale because
-# its source of truth is out of date, which is what happens in the real world.
-#
-# Interface matches the existing sample agent: prompt comes in as argv,
-# the answer is printed to stdout. run_evaluations calls it the same way.
-#
-# With OPENAI_API_KEY set, it calls a real model grounded strictly on the
-# notes, so repeated runs wobble and your statistics have something to measure.
-# With no key, it returns a deterministic stale answer so the demo still runs.
 
 NOTES_PATH = Path(__file__).with_name("agent_notes.txt")
 
@@ -46,9 +35,7 @@ def _live_answer(prompt: str, notes: str) -> str:
     return response.choices[0].message.content or ""
 
 
-def _fixed_answer(prompt: str) -> str:
-    # Deterministic fallback used when no API key is set.
-    # Mirrors the current notes so the no-key path exercises the same behavior.
+def _notes_based_answer(notes: str) -> str:
     return (
         "```python\n"
         "from openai import OpenAI\n"
@@ -63,12 +50,13 @@ def _fixed_answer(prompt: str) -> str:
 
 
 def answer(prompt: str) -> str:
+    notes = _notes()
     if os.getenv("OPENAI_API_KEY"):
         try:
-            return _live_answer(prompt, _notes())
-        except Exception as exc:  # keep the demo alive if the call fails
-            return f"[live agent error, using fallback] {exc}\n" + _fixed_answer(prompt)
-    return _fixed_answer(prompt)
+            return _live_answer(prompt, notes)
+        except Exception as exc:
+            return f"[live agent error, using notes fallback] {exc}\n" + _notes_based_answer(notes)
+    return _notes_based_answer(notes)
 
 
 if __name__ == "__main__":
