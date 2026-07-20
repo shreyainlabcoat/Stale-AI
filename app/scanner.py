@@ -18,8 +18,14 @@ IGNORED_PARTS = {
 }
 
 
-def scan_repository(repo_path: str, change: ChangeCard) -> ScanResponse:
-    repo = resolve_repo(repo_path)
+def scan_repository(
+    repo_path: str | Path,
+    change: ChangeCard,
+    *,
+    base_dir: Path | None = None,
+) -> ScanResponse:
+    """Scan a repository for text references affected by a documentation change."""
+    repo = resolve_repo(repo_path, base_dir=base_dir)
     search_terms = list(dict.fromkeys(
         change.deprecated_terms + change.affected_terms + [change.old_behavior]
     ))

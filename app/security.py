@@ -5,22 +5,31 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-ALLOWED_ROOT = Path(os.getenv("STALEAI_ALLOWED_ROOT") or PROJECT_ROOT).resolve()
+_allowed_root_env = os.getenv("STALEAI_ALLOWED_ROOT")
+ALLOWED_ROOT = Path(_allowed_root_env).resolve() if _allowed_root_env else None
 
 
-def resolve_repo(repo_path: str) -> Path:
+def resolve_repo(
+    repo_path: str | Path,
+    *,
+    base_dir: Path | None = None,
+    allowed_root: Path | None = ALLOWED_ROOT,
+) -> Path:
+    """Resolve a repository path and enforce the optional allowed-root boundary."""
     candidate = Path(repo_path).expanduser()
     if not candidate.is_absolute():
-        candidate = (PROJECT_ROOT / candidate).resolve()
+        root = (base_dir or PROJECT_ROOT).resolve()
+        candidate = (root / candidate).resolve()
     else:
         candidate = candidate.resolve()
 
-    try:
-        candidate.relative_to(ALLOWED_ROOT)
-    except ValueError as exc:
-        raise ValueError(
-            f"Repository must be inside allowed root: {ALLOWED_ROOT}"
-        ) from exc
+    if allowed_root is not None:
+        try:
+            candidate.relative_to(allowed_root)
+        except ValueError as exc:
+            raise ValueError(
+                f"Repository must be inside allowed root: {allowed_root}"
+            ) from exc
 
     if not candidate.exists() or not candidate.is_dir():
         raise ValueError(f"Repository directory does not exist: {candidate}")
@@ -28,6 +37,7 @@ def resolve_repo(repo_path: str) -> Path:
 
 
 def resolve_inside_repo(repo: Path, relative_path: str) -> Path:
+    """Resolve a file inside the selected repository."""
     target = (repo / relative_path).resolve()
     try:
         target.relative_to(repo)

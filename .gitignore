@@ -200,6 +200,10 @@ tempCodeRunnerFile.py
 
 # Local snapshot state
 data/snapshots.json
+.staleai/pending.json
+.staleai/reports/
+!.staleai/
+!.staleai/snapshots.json
 
 # Ruff stuff:
 .ruff_cache/

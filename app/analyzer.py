@@ -165,7 +165,14 @@ CURRENT VERSION:
 
 def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
     used_model = bool(os.getenv("OPENAI_API_KEY"))
-    change = _model_analyze(req) if used_model else _heuristic(req)
+    if used_model:
+        try:
+            change = _model_analyze(req)
+        except Exception:  # noqa: BLE001
+            change = _heuristic(req)
+            used_model = False
+    else:
+        change = _heuristic(req)
     ratio = _change_ratio(req.old_text, req.new_text)
 
     # Initial score excludes repository impact, which is added by the scanner.
