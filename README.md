@@ -74,6 +74,96 @@ uvicorn app.main:app --reload
 
 Open `http://127.0.0.1:8000`.
 
+## Use Stale AI in your agent repository
+
+### Installation
+
+```bash
+pip install git+https://github.com/shreyainlabcoat/Stale-AI.git
+```
+
+### Initialization
+
+```bash
+cd my-agent
+staleai init
+```
+
+This creates:
+
+- `staleai.yaml`
+- `.staleai/snapshots.json`
+- optionally `.github/workflows/staleai.yml`
+
+### Manual check
+
+```bash
+staleai check
+```
+
+Stale AI fetches the current trusted source content, compares it to the approved baseline, analyzes the change, scans the repository for impacted references, generates targeted regression evaluations, runs your agent command, and writes a JSON report to `.staleai/reports/latest.json`.
+
+`staleai check` never approves a changed source automatically.
+
+### Accepting an approved source update
+
+```bash
+staleai accept
+```
+
+Use this only after a human has reviewed the changed source and decided it should become the new trusted baseline.
+
+### GitHub setup
+
+If you initialize with `staleai init --github-action`, Stale AI creates `.github/workflows/staleai.yml`.
+
+Add `OPENAI_API_KEY` as a GitHub Actions repository secret to enable model-based analysis, generated evaluations, and semantic judging. The key is optional: without it, Stale AI still uses deterministic fallbacks for change analysis and regression generation.
+
+You can optionally set `OPENAI_MODEL` as a repository variable to choose the OpenAI model used during checks.
+
+The generated GitHub Action:
+
+- runs on a daily schedule and with `workflow_dispatch`
+- installs Stale AI from this GitHub repository
+- runs `staleai check`
+- uploads `.staleai/reports/latest.json` as an artifact when practical
+- never runs `staleai accept`
+- never performs automatic repair
+
+Codex CLI is optional and only needed for the existing local repair workflow exposed by the dashboard and repair API.
+
+### End-to-end flow
+
+```text
+trusted docs/policy
+        |
+        v
+  staleai init
+        |
+        v
+approved baseline saved in .staleai/snapshots.json
+        |
+        v
+  staleai check
+        |
+        +--> unchanged -> exit 0
+        |
+        +--> changed -> analyze -> scan repo -> generate evals -> run agent
+                              |                         |
+                              |                         +--> pass -> exit 0
+                              |
+                              +--> review needed or failures -> exit 1
+        |
+        v
+pending candidate saved in .staleai/pending.json
+        |
+        v
+ human review
+        |
+        v
+  staleai accept
+```
+
 ## Environment
 
 The app works without an OpenAI API key using deterministic fallbacks for analysis, eval generation, and the bundled demo repair.
@@ -137,9 +227,9 @@ python scripts/reset_sample.py
 - `passed_runs` and `total_runs`
 - `pass_rate`
 - Wilson confidence bounds
-- A simple binary Brier score for the “should pass” target
+- A simple binary Brier score for the "should pass" target
 
-This is the small version of the broader “confidence over time” layer. It gives the demo a concrete numeric story without pretending to be a full benchmark framework yet.
+This is the small version of the broader "confidence over time" layer. It gives the demo a concrete numeric story without pretending to be a full benchmark framework yet.
 
 ## Codex integration
 

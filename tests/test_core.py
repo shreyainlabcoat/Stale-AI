@@ -112,6 +112,17 @@ def test_check_source_reports_changed_state(monkeypatch, tmp_path):
     assert payload["analysis"]["change"]["new_behavior"]
 
 
+def test_openai_demo_endpoint_returns_bundled_files():
+    response = client.get("/api/demo/openai")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["repo_path"] == "sample_target_openai"
+    assert payload["agent_script"] == "agent.py"
+    assert payload["source_name"] == "OpenAI Python SDK docs"
+    assert payload["old_text"] == (ROOT / "sample_target_openai" / "docs_v0.txt").read_text(encoding="utf-8")
+    assert payload["new_text"] == (ROOT / "sample_target_openai" / "docs_v1.txt").read_text(encoding="utf-8")
+
+
 def test_run_evaluations_without_key_skips_semantic_judge(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     change = analyze(

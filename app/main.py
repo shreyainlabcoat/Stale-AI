@@ -44,6 +44,29 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/api/demo/openai")
+def openai_demo() -> dict[str, str]:
+    demo_root = PROJECT_ROOT / "sample_target_openai"
+    old_path = demo_root / "docs_v0.txt"
+    new_path = demo_root / "docs_v1.txt"
+    try:
+        old_text = old_path.read_text(encoding="utf-8")
+        new_text = new_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to read bundled OpenAI demo files: {exc}",
+        ) from exc
+
+    return {
+        "old_text": old_text,
+        "new_text": new_text,
+        "repo_path": "sample_target_openai",
+        "agent_script": "agent.py",
+        "source_name": "OpenAI Python SDK docs",
+    }
+
+
 @app.post("/api/analyze", response_model=AnalyzeResponse)
 def analyze_route(req: AnalyzeRequest) -> AnalyzeResponse:
     try:

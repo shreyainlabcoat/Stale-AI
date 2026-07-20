@@ -5,6 +5,8 @@ import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from tempfile import NamedTemporaryFile
+from typing import Any
 
 import httpx
 import trafilatura
@@ -15,6 +17,8 @@ DATA_DIR = PROJECT_ROOT / "data"
 SNAPSHOT_FILE = DATA_DIR / "snapshots.json"
 USER_AGENT = "StaleAI/0.1 (+https://localhost)"
 DEFAULT_TIMEOUT = 10.0
+SnapshotRecord = dict[str, str | float]
+SnapshotMap = dict[str, SnapshotRecord]
 
 
 def normalize(text: str) -> str:
@@ -54,22 +58,39 @@ def fetch(url: str) -> dict[str, str]:
     }
 
 
-def load_store() -> dict[str, dict[str, str | float]]:
-    if not SNAPSHOT_FILE.exists():
-        return {}
-    with SNAPSHOT_FILE.open("r", encoding="utf-8") as handle:
-        data = json.load(handle)
+def _coerce_store(data: Any) -> SnapshotMap:
     return data if isinstance(data, dict) else {}
 
 
-def save_store(store: dict[str, dict[str, str | float]]) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with SNAPSHOT_FILE.open("w", encoding="utf-8") as handle:
+def load_store(snapshot_file: Path | None = None) -> SnapshotMap:
+    """Load a snapshot store from disk."""
+    path = snapshot_file or SNAPSHOT_FILE
+    if not path.exists():
+        return {}
+    with path.open("r", encoding="utf-8") as handle:
+        data = json.load(handle)
+    return _coerce_store(data)
+
+
+def save_store(store: SnapshotMap, snapshot_file: Path | None = None) -> None:
+    """Persist a snapshot store with an atomic replace."""
+    path = snapshot_file or SNAPSHOT_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        dir=path.parent,
+        delete=False,
+        suffix=".tmp",
+    ) as handle:
         json.dump(store, handle, indent=2, sort_keys=True)
+        temp_path = Path(handle.name)
+    temp_path.replace(path)
 
 
-def get_snapshot(url: str) -> dict[str, str | float] | None:
-    return load_store().get(url)
+def get_snapshot(url: str, snapshot_file: Path | None = None) -> SnapshotRecord | None:
+    """Return a single stored snapshot by URL."""
+    return load_store(snapshot_file).get(url)
 
 
 def put_snapshot(
@@ -80,9 +101,11 @@ def put_snapshot(
     text: str,
     sha: str,
     fetched_at: str,
-) -> dict[str, str | float]:
-    store = load_store()
-    snapshot: dict[str, str | float] = {
+    snapshot_file: Path | None = None,
+) -> SnapshotRecord:
+    """Insert or replace a stored snapshot by URL."""
+    store = load_store(snapshot_file)
+    snapshot: SnapshotRecord = {
         "url": url,
         "label": label,
         "authority": authority,
@@ -91,5 +114,5 @@ def put_snapshot(
         "fetched_at": fetched_at,
     }
     store[url] = snapshot
-    save_store(store)
+    save_store(store, snapshot_file)
     return snapshot

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 from openai import OpenAI
 from pydantic import BaseModel
@@ -93,8 +94,40 @@ Each evaluation must:
 
 def generate_evaluations(req: GenerateEvalsRequest) -> GenerateEvalsResponse:
     used_model = bool(os.getenv("OPENAI_API_KEY"))
-    evaluations = _model_evals(req) if used_model else _heuristic_evals(req)
+    if used_model:
+        try:
+            evaluations = _model_evals(req)
+        except Exception:  # noqa: BLE001
+            evaluations = _heuristic_evals(req)
+            used_model = False
+    else:
+        evaluations = _heuristic_evals(req)
     return GenerateEvalsResponse(evaluations=evaluations, used_model=used_model)
+
+
+def build_agent_command(command_template: list[str], prompt: str) -> list[str]:
+    """Build a concrete agent command by substituting the prompt placeholder."""
+    occurrences = sum(part.count("{prompt}") for part in command_template)
+    if occurrences != 1:
+        raise ValueError('Agent command must contain "{prompt}" exactly once')
+    return [part.replace("{prompt}", prompt) for part in command_template]
+
+
+def execute_agent_command(
+    repo: Path,
+    command: list[str],
+    timeout_seconds: int,
+) -> subprocess.CompletedProcess[str]:
+    """Execute an agent command inside the selected repository."""
+    return subprocess.run(
+        command,
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        timeout=timeout_seconds,
+        check=False,
+        shell=False,
+    )
 
 
 def _semantic_judge(
@@ -117,41 +150,38 @@ Fail only if the output presents obsolete behavior as current or contradicts the
         "evaluation": evaluation.model_dump(),
         "agent_output": agent_output,
     }
-    response = client.responses.parse(
-        model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-        input=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": str(context)},
-        ],
-        text_format=SemanticJudgeResult,
-    )
+    try:
+        response = client.responses.parse(
+            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            input=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": str(context)},
+            ],
+            text_format=SemanticJudgeResult,
+        )
+    except Exception:  # noqa: BLE001
+        return None
     return response.output_parsed
 
 
-def run_evaluations(
-    repo_path: str,
-    agent_script: str,
+def _run_evaluations_for_command(
+    repo: Path,
+    command_builder,
     evaluations: list[Evaluation],
     change: ChangeCard | None,
     timeout_seconds: int,
     runs_per_eval: int,
 ) -> RunEvalsResponse:
-    repo = resolve_repo(repo_path)
-    script = resolve_inside_repo(repo, agent_script)
-
     results: list[EvalResult] = []
     for evaluation in evaluations:
         attempts: list[dict[str, object]] = []
         for _ in range(runs_per_eval):
             returncode_ok = False
             try:
-                completed = subprocess.run(
-                    [sys.executable, str(script), evaluation.prompt],
-                    cwd=repo,
-                    capture_output=True,
-                    text=True,
-                    timeout=timeout_seconds,
-                    check=False,
+                completed = execute_agent_command(
+                    repo,
+                    command_builder(evaluation.prompt),
+                    timeout_seconds,
                 )
                 output = (completed.stdout + "\n" + completed.stderr).strip()
                 output_lower = output.lower()
@@ -171,6 +201,11 @@ def run_evaluations(
                 found = []
                 error = "Timed out"
             except OSError as exc:
+                output = ""
+                missing = evaluation.required_substrings
+                found = []
+                error = str(exc)
+            except ValueError as exc:
                 output = ""
                 missing = evaluation.required_substrings
                 found = []
@@ -233,4 +268,36 @@ def run_evaluations(
         pass_rate=overall_pass_rate,
         average_brier_score=average_brier_score,
         results=results,
+    )
+
+
+def run_evaluations(
+    repo_path: str,
+    agent_script: str,
+    evaluations: list[Evaluation],
+    change: ChangeCard | None,
+    timeout_seconds: int,
+    runs_per_eval: int,
+    agent_command: list[str] | None = None,
+    base_dir: Path | None = None,
+) -> RunEvalsResponse:
+    repo = resolve_repo(repo_path, base_dir=base_dir)
+    if agent_command is not None:
+        return _run_evaluations_for_command(
+            repo,
+            lambda prompt: build_agent_command(list(agent_command), prompt),
+            evaluations,
+            change,
+            timeout_seconds,
+            runs_per_eval,
+        )
+
+    script = resolve_inside_repo(repo, agent_script)
+    return _run_evaluations_for_command(
+        repo,
+        lambda prompt: [sys.executable, str(script), prompt],
+        evaluations,
+        change,
+        timeout_seconds,
+        runs_per_eval,
     )
