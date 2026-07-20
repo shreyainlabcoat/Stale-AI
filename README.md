@@ -227,9 +227,9 @@ python scripts/reset_sample.py
 - `passed_runs` and `total_runs`
 - `pass_rate`
 - Wilson confidence bounds
-- A simple binary Brier score for the “should pass” target
+- A simple binary Brier score for the "should pass" target
 
-This is the small version of the broader “confidence over time” layer. It gives the demo a concrete numeric story without pretending to be a full benchmark framework yet.
+This is the small version of the broader "confidence over time" layer. It gives the demo a concrete numeric story without pretending to be a full benchmark framework yet.
 
 ## Codex integration
 
