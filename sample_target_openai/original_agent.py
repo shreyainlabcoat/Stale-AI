@@ -30,7 +30,6 @@ def _live_answer(prompt: str, notes: str) -> str:
             {"role": "system", "content": system},
             {"role": "user", "content": prompt},
         ],
-        temperature=float(os.getenv("AGENT_TEMPERATURE", "0.7")),
     )
     return response.choices[0].message.content or ""
 

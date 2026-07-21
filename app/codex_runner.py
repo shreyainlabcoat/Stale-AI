@@ -42,16 +42,16 @@ def _demo_repair(repo: Path) -> RepairResponse | None:
 
 
 def _git_diff(repo: Path) -> str:
-    if not (repo / ".git").exists():
-        return ""
     completed = subprocess.run(
-        ["git", "diff", "--"],
+        ["git", "diff", "--", "."],
         cwd=repo,
         capture_output=True,
         text=True,
         timeout=20,
         check=False,
     )
+    if completed.returncode != 0:
+        return ""
     return completed.stdout[:20000]
 
 
