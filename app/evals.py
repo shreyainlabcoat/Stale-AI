@@ -17,6 +17,7 @@ from .models import (
     RunEvalsResponse,
 )
 from .security import resolve_inside_repo, resolve_repo
+from .settings import FAST_DEMO_RUNS_PER_EVAL, fast_demo_enabled, semantic_judge_enabled
 from .stats import brier_score_binary, wilson_interval
 
 
@@ -135,7 +136,7 @@ def _semantic_judge(
     change: ChangeCard | None,
     evaluation: Evaluation,
 ) -> SemanticJudgeResult | None:
-    if not os.getenv("OPENAI_API_KEY") or change is None:
+    if not semantic_judge_enabled() or not os.getenv("OPENAI_API_KEY") or change is None:
         return None
 
     client = OpenAI()
@@ -281,9 +282,13 @@ def run_evaluations(
     agent_command: list[str] | None = None,
     base_dir: Path | None = None,
 ) -> RunEvalsResponse:
+    fast_demo = fast_demo_enabled()
+    if fast_demo:
+        runs_per_eval = FAST_DEMO_RUNS_PER_EVAL
+
     repo = resolve_repo(repo_path, base_dir=base_dir)
     if agent_command is not None:
-        return _run_evaluations_for_command(
+        result = _run_evaluations_for_command(
             repo,
             lambda prompt: build_agent_command(list(agent_command), prompt),
             evaluations,
@@ -291,13 +296,16 @@ def run_evaluations(
             timeout_seconds,
             runs_per_eval,
         )
+    else:
+        script = resolve_inside_repo(repo, agent_script)
+        result = _run_evaluations_for_command(
+            repo,
+            lambda prompt: [sys.executable, str(script), prompt],
+            evaluations,
+            change,
+            timeout_seconds,
+            runs_per_eval,
+        )
 
-    script = resolve_inside_repo(repo, agent_script)
-    return _run_evaluations_for_command(
-        repo,
-        lambda prompt: [sys.executable, str(script), prompt],
-        evaluations,
-        change,
-        timeout_seconds,
-        runs_per_eval,
-    )
+    result.fast_demo_mode = fast_demo
+    return result

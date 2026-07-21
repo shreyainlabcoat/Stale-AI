@@ -1,10 +1,12 @@
 # Stale AI
 
+[![Tests](https://github.com/shreyainlabcoat/Stale-AI/actions/workflows/tests.yml/badge.svg)](https://github.com/shreyainlabcoat/Stale-AI/actions/workflows/tests.yml)
+
 _because confidently outdated is still outdated_
 
 Stale AI monitors trusted sources of truth, detects when they change, and shows when an agent has silently gone stale.
 
-The motivating case is PMOS-style drift: a production support or coding agent was correct yesterday, a policy, SDK, or platform source changed, and the agent keeps confidently presenting obsolete behavior as current. Stale AI turns that quiet failure mode into a visible, reviewable workflow for teams operating a real agent.
+The motivating case is PMOS-style drift: a production support or coding agent was correct yesterday, a policy, SDK, or platform source changed, and the agent keeps confidently presenting obsolete behavior as current. Most teams find out about this kind of drift from a support ticket or an incident, not from a test suite. Stale AI turns that quiet failure mode into a visible, reviewable workflow, with reproducible before/after evidence that a specific documentation change broke a specific agent behavior.
 
 ## Who it is for
 
@@ -35,6 +37,19 @@ Stale AI does not let an LLM decide everything.
 - The target agent is executed as a subprocess
 - Repair stays inside the selected repository
 - Tests and regression checks run after changes
+
+## AI workflow: GPT-5.6 + Codex
+
+Stale AI is built around a deliberate split between deterministic checks and model calls, so every model call has a narrow, verifiable job:
+
+| Stage | Model | What it does | File |
+|---|---|---|---|
+| Source-change analysis | GPT-5.6 | Extracts an old/new documentation diff into a strict, Pydantic-validated `ChangeCard` (change type, deprecated/replacement terms, materiality, breaking signal) | [`app/analyzer.py`](app/analyzer.py) |
+| Evaluation generation | GPT-5.6 | Turns the change record and repository matches into targeted regression prompts with exact required/forbidden substrings | [`app/evals.py`](app/evals.py) |
+| Semantic judge | GPT-5.6 | Adds a consistency check on top of the deterministic substring/return-code grading, catching cases where an agent presents obsolete behavior without tripping a literal string match | [`app/evals.py`](app/evals.py) |
+| Repair | Codex CLI | Runs `codex exec --ephemeral --sandbox workspace-write` inside the selected repository with a generated repair prompt, and surfaces the resulting `git diff` for human review | [`app/codex_runner.py`](app/codex_runner.py) |
+
+None of these calls are free-form. Analysis and eval generation return schema-validated output; the judge only ever adds a pass/fail signal on top of grading that already happened deterministically; Codex never runs without an explicit `run_codex=True` and its output is a diff to review, not an auto-applied change. If a model call fails or no API key is present, every stage has a deterministic fallback so the pipeline still produces a usable result — see [Environment](#environment) and [Fast demo mode](#fast-demo-mode).
 
 ## Core workflow
 
@@ -168,10 +183,39 @@ pending candidate saved in .staleai/pending.json
 
 The app works without an OpenAI API key using deterministic fallbacks for analysis, eval generation, and the bundled demo repair.
 
-- Set `OPENAI_API_KEY` to enable structured extraction, model-generated evals, and the semantic judge
-- Set `OPENAI_MODEL` in `.env` to a model your account can actually call before a live demo
-- Set `STALEAI_ALLOWED_ROOT` to restrict scanning and repair to a specific directory tree
-- Set `CODEX_BIN` if the Codex CLI is not already on `PATH`
+| Variable | Purpose |
+|---|---|
+| `OPENAI_API_KEY` | Optional. Enables structured extraction, model-generated evals, and the semantic judge. |
+| `OPENAI_MODEL` | Model used for analysis, eval generation, and the judge. Set this to a model your account can actually call before a live demo. |
+| `STALEAI_ALLOWED_ROOT` | Restricts repository scanning and repair to a specific directory tree. Defaults to the project directory. |
+| `CODEX_BIN` | Codex executable, if it is not already on `PATH`. |
+| `STALEAI_FAST_DEMO` | See [Fast demo mode](#fast-demo-mode) below. |
+| `STALEAI_SEMANTIC_JUDGE` | Independently enable/disable the semantic judge without turning on the rest of fast demo mode. Defaults to on. Fast demo mode always forces it off regardless of this setting. |
+
+## Fast demo mode
+
+The full evaluation loop is thorough but sequential: 3 evaluations x 3 runs each means 1 analysis call, 1 eval-generation call, up to 9 live agent calls, and up to 9 semantic-judge calls for a single evaluation run. That is the right default for production freshness checks, but it makes a live demo slow and burns API calls on every repeat run.
+
+Set `STALEAI_FAST_DEMO=true` to keep the meaningful model-powered parts and cut everything repetitive:
+
+1. `runs_per_eval` is forced to 1, regardless of what the UI or API request asks for.
+2. The semantic judge is skipped entirely.
+3. Grading still runs the existing deterministic checks: required substrings, forbidden substrings, and process return code.
+4. The bundled `sample_target_openai` agent answers from its notes-based deterministic response instead of making a live OpenAI call. This is a direct skip, not a wait-then-fallback: the agent never attempts the live call, so a slow or failing request can't stall the demo.
+5. Source-change analysis and evaluation generation still call the OpenAI API when `OPENAI_API_KEY` is set — those two calls are the meaningful, one-time model work worth keeping.
+6. With `STALEAI_FAST_DEMO` unset or `false`, behavior is unchanged from the full production flow.
+
+The dashboard shows a `FAST DEMO MODE` badge whenever it's active (fetched from `GET /api/config`), and `POST /api/run-evals` reports `fast_demo_mode` in its response so this is never a silent behavior change.
+
+Measured on this repository's bundled OpenAI-migration demo (reset -> analyze -> scan -> generate 3 evals -> run before repair -> repair -> run after repair), with a real `OPENAI_API_KEY`:
+
+| | Full mode | Fast demo mode |
+|---|---|---|
+| Real OpenAI API calls | 38 (1 analyze + 1 eval-gen + 18 judge + 18 live agent, across both evaluation runs) | 2 (analyze + eval-gen only) |
+| Wall-clock time | 185.6s | 6.8s |
+| Result | 0/3 -> repaired -> 3/3 | 0/3 -> repaired -> 3/3 |
+
+Use `STALEAI_SEMANTIC_JUDGE=false` on its own if you just want to drop judge calls (for cost or determinism) without forcing `runs_per_eval` down or touching the sample agent.
 
 ## Demo
 
@@ -183,7 +227,7 @@ Use these files in the UI:
 - New docs: `sample_target_openai/docs_v1.txt`
 - Repository: `sample_target_openai`
 - Agent script: `agent.py`
-- Trials per evaluation: `3`
+- Trials per evaluation: `3` (or `1` automatically if `STALEAI_FAST_DEMO=true`)
 
 What you should see:
 
@@ -208,8 +252,18 @@ Reset both bundled samples:
 python scripts/reset_sample.py
 ```
 
+## Real-world demonstration: GitHub audit-log migration
+
+GitHub's audit-log guidance provides a good historical replay example for Stale AI. An assistant can keep recommending the older GraphQL audit-log interface long after the official guidance has moved to the REST endpoint `GET /orgs/{org}/audit-log`.
+
+The included GitHub audit-log demo shows that workflow end to end: Stale AI detects the documentation change, finds stale repository references such as legacy audit-log identifiers, generates targeted regression evaluations, and marks the unchanged agent stale when it still recommends the deprecated path.
+
+After the agent is repaired, the same evaluations pass without automatically accepting the new trusted source baseline. The full walkthrough is in [`examples/github-audit-log-demo/README.md`](examples/github-audit-log-demo/README.md).
+
 ## API endpoints
 
+- `GET /api/config`
+- `GET /api/demo/openai`
 - `POST /api/analyze`
 - `POST /api/sources/track`
 - `POST /api/sources/check`
@@ -228,6 +282,7 @@ python scripts/reset_sample.py
 - `pass_rate`
 - Wilson confidence bounds
 - A simple binary Brier score for the "should pass" target
+- `fast_demo_mode`, reflecting whether fast demo mode was active for that run
 
 This is the small version of the broader "confidence over time" layer. It gives the demo a concrete numeric story without pretending to be a full benchmark framework yet.
 
@@ -241,11 +296,19 @@ codex exec --ephemeral --sandbox workspace-write "<repair task>"
 
 inside the selected repository. The prompt requires the smallest safe patch, backward compatibility where appropriate, and test execution. The UI surfaces the resulting `git diff` prominently as a proposed patch to review.
 
+## Testing
+
+```bash
+pytest
+```
+
+The suite covers the analyzer, scanner, eval runner, CLI, repair fallback, and fast demo mode (settings parsing, forced `runs_per_eval`, judge skip, and the sample agent's deterministic short-circuit) without requiring an OpenAI API key.
+
 ## Current limitations
 
 - The bundled stats layer is intentionally lightweight, not a full benchmark suite
 - The deterministic demo repair is currently tailored to the packaged OpenAI migration sample
-- The semantic judge only runs when `OPENAI_API_KEY` is present
+- The semantic judge only runs when `OPENAI_API_KEY` is present and enabled
 
 ## Roadmap
 

@@ -378,9 +378,12 @@
       gap: 12px;
     }
 
-    .initial-metadata,
-    .metric-grid {
+    .initial-metadata {
       grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .metric-grid {
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
     }
 
     .config-grid,

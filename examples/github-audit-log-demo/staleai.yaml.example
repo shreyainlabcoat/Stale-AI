@@ -1,0 +1,21 @@
+version: 1
+
+agent:
+  command:
+    - python
+    - agent.py
+    - "{prompt}"
+  timeout_seconds: 20
+
+sources:
+  - name: GitHub organization audit-log documentation
+    url: https://raw.githubusercontent.com/YOUR_USERNAME/staleai-github-source/main/audit-log.md
+    authority: 1.0
+
+evaluations:
+  count: 3
+  runs_per_eval: 3
+
+repair:
+  enabled: false
+  require_approval: true

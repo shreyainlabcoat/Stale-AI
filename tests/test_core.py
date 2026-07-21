@@ -125,6 +125,7 @@ def test_openai_demo_endpoint_returns_bundled_files():
 
 def test_run_evaluations_without_key_skips_semantic_judge(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("STALEAI_FAST_DEMO", raising=False)
     change = analyze(
         AnalyzeRequest(
             source_name="Current documentation",

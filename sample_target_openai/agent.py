@@ -6,6 +6,11 @@ from pathlib import Path
 
 
 NOTES_PATH = Path(__file__).with_name("agent_notes.txt")
+_TRUE_VALUES = {"1", "true", "yes", "on"}
+
+
+def _fast_demo() -> bool:
+    return os.getenv("STALEAI_FAST_DEMO", "").strip().lower() in _TRUE_VALUES
 
 
 def _notes() -> str:
@@ -62,6 +67,8 @@ def _notes_based_answer(notes: str) -> str:
 
 def answer(prompt: str) -> str:
     notes = _notes()
+    if _fast_demo():
+        return _notes_based_answer(notes)
     if os.getenv("OPENAI_API_KEY"):
         try:
             return _live_answer(prompt, notes)

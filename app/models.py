@@ -149,6 +149,7 @@ class RunEvalsResponse(BaseModel):
     pass_rate: float = Field(default=0, ge=0, le=1)
     average_brier_score: float = Field(default=0, ge=0, le=1)
     results: list[EvalResult]
+    fast_demo_mode: bool = False
 
 
 class RepairRequest(BaseModel):

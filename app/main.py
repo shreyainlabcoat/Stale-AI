@@ -26,6 +26,7 @@ from .models import (
     TrackResponse,
 )
 from .scanner import scan_repository
+from .settings import fast_demo_status
 from .sources import fetch, get_snapshot, put_snapshot
 
 load_dotenv()
@@ -42,6 +43,11 @@ def home() -> str:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/config")
+def app_config() -> dict[str, bool]:
+    return fast_demo_status()
 
 
 @app.get("/api/demo/openai")
