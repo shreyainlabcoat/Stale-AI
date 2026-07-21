@@ -5,353 +5,1654 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Stale AI</title>
   <style>
-    :root { font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #16181d; background: #f5f6f8; }
+    :root {
+      --background: #0b0b0a;
+      --surface: #121210;
+      --surface-raised: #181816;
+      --border: #30302c;
+      --text-primary: #edece5;
+      --text-secondary: #85847c;
+      --drift: #ff6b35;
+      --warning: #e9b949;
+      --verified: #68d391;
+      --failure: #f56565;
+      --radius: 4px;
+      --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      --sans: "Inter", "Segoe UI", Helvetica, Arial, sans-serif;
+      font-family: var(--sans);
+      color: var(--text-primary);
+      background: var(--background);
+    }
+
     * { box-sizing: border-box; }
-    body { margin: 0; }
-    header { background: #111318; color: white; padding: 24px max(24px, calc((100vw - 1180px)/2)); }
-    header h1 { margin: 0; font-size: 30px; }
-    header p { margin: 6px 0 0; color: #b8bec9; }
-    main { max-width: 1180px; margin: 24px auto; padding: 0 20px 60px; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    .card { background: white; border: 1px solid #dde1e7; border-radius: 14px; padding: 18px; margin-bottom: 16px; box-shadow: 0 4px 16px rgba(20,25,35,.04); }
-    h2 { margin: 0 0 12px; font-size: 18px; }
-    h3 { margin: 12px 0 6px; font-size: 14px; }
-    label { display: block; font-size: 13px; font-weight: 650; margin: 10px 0 5px; }
-    textarea, input { width: 100%; border: 1px solid #cfd5df; border-radius: 9px; padding: 10px; font: inherit; background: white; }
-    textarea { min-height: 190px; resize: vertical; }
-    button { border: 0; border-radius: 9px; padding: 10px 15px; font-weight: 700; cursor: pointer; background: #111318; color: white; margin: 10px 6px 0 0; }
-    button.secondary { background: #e9ecf1; color: #1b1e24; }
-    button:disabled { opacity: .5; cursor: wait; }
-    pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #111318; color: #e7ecf4; border-radius: 10px; padding: 13px; max-height: 360px; overflow: auto; }
-    .metric-row { display: flex; gap: 10px; flex-wrap: wrap; }
-    .metric { background: #f0f2f5; border-radius: 9px; padding: 9px 12px; }
-    .metric b { display: block; font-size: 18px; }
-    .status { display: inline-block; padding: 5px 9px; border-radius: 999px; background: #eceff3; font-weight: 700; font-size: 12px; }
-    .pass { background: #dff7e9; color: #126436; }
-    .fail { background: #fde5e4; color: #8a211c; }
-    .hidden { display: none; }
-    .eval { border-top: 1px solid #e4e7ec; padding: 12px 0; }
-    .small { font-size: 12px; color: #687080; }
-    @media (max-width: 780px) { .grid { grid-template-columns: 1fr; } }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px) 0 0 / 30px 30px,
+        linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px) 0 0 / 30px 30px,
+        var(--background);
+      color: var(--text-primary);
+    }
+
+    .workspace {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 28px 20px 64px;
+    }
+
+    .header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 20px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 22px;
+      margin-bottom: 30px;
+    }
+
+    .brandline,
+    .incident-meta,
+    .mono-label,
+    .status-pill,
+    .timeline-index,
+    .metric-label,
+    .tiny,
+    .find-state,
+    .eval-id {
+      font-family: var(--mono);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .brandline {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--text-secondary);
+      font-size: 0.74rem;
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2.2rem, 5vw, 3.7rem);
+      line-height: 0.9;
+      letter-spacing: -0.04em;
+      font-weight: 700;
+    }
+
+    .stale-word {
+      color: var(--drift);
+    }
+
+    .tagline {
+      margin: 14px 0 0;
+      font-size: 1.15rem;
+      line-height: 1.35;
+      max-width: 24rem;
+    }
+
+    .incident-box {
+      align-self: start;
+      border: 1px solid var(--border);
+      padding: 14px 16px;
+      background: var(--surface);
+      min-width: 260px;
+    }
+
+    .incident-box strong {
+      display: block;
+      font-size: 1.15rem;
+      margin: 10px 0 6px;
+      font-weight: 600;
+    }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 10px;
+      color: var(--drift);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    .fast-demo-badge {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 10px;
+      border: 1px solid rgba(104, 211, 145, 0.35);
+      background: rgba(104, 211, 145, 0.08);
+      color: var(--verified);
+      padding: 10px 14px;
+      margin-bottom: 18px;
+      border-radius: 2px;
+    }
+
+    .fast-demo-badge .fast-demo-title {
+      font-family: var(--mono);
+      font-weight: 700;
+      font-size: 0.76rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .fast-demo-badge .fast-demo-sub {
+      color: var(--text-secondary);
+      font-size: 0.76rem;
+    }
+
+    .summary {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      padding: 18px;
+      margin-bottom: 26px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .summary.running::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--drift), transparent);
+      animation: scan 1.2s linear infinite;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: 1.6fr 1fr;
+      gap: 20px;
+    }
+
+    .summary-kicker {
+      color: var(--drift);
+      font-size: 0.74rem;
+      margin-bottom: 8px;
+    }
+
+    .summary-headline {
+      margin: 0;
+      font-size: clamp(1.8rem, 4vw, 3rem);
+      line-height: 0.95;
+      letter-spacing: -0.04em;
+    }
+
+    .summary-copy {
+      margin: 10px 0 0;
+      color: var(--text-secondary);
+      max-width: 42rem;
+      line-height: 1.5;
+    }
+
+    .summary-meta {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      align-content: start;
+    }
+
+    .meta-box,
+    .input-shell,
+    .evidence-pane,
+    .finding,
+    .eval-row,
+    .config-box {
+      border: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .meta-box {
+      padding: 12px;
+      min-height: 76px;
+    }
+
+    .metric-label {
+      color: var(--text-secondary);
+      font-size: 0.68rem;
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .metric-value {
+      font-size: 1.2rem;
+      font-weight: 600;
+      line-height: 1.15;
+      word-break: break-word;
+    }
+
+    .metric-value.mono {
+      font-family: var(--mono);
+      font-size: 0.95rem;
+      font-weight: 500;
+    }
+
+    .investigation {
+      display: grid;
+      grid-template-columns: 124px 1fr;
+      gap: 22px;
+    }
+
+    .timeline-rail {
+      position: sticky;
+      top: 18px;
+      align-self: start;
+      padding-top: 6px;
+    }
+
+    .timeline-rail::before {
+      content: "";
+      position: absolute;
+      left: 13px;
+      top: 8px;
+      bottom: 8px;
+      width: 1px;
+      background: var(--border);
+    }
+
+    .timeline-step {
+      position: relative;
+      padding: 0 0 22px 34px;
+      color: var(--text-secondary);
+      font-size: 0.74rem;
+      line-height: 1.4;
+    }
+
+    .timeline-step::before {
+      content: "";
+      position: absolute;
+      left: 8px;
+      top: 2px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 1px solid currentColor;
+      background: var(--background);
+    }
+
+    .timeline-step.active {
+      color: var(--drift);
+    }
+
+    .timeline-step.complete {
+      color: var(--verified);
+    }
+
+    .timeline-step.complete::before {
+      background: currentColor;
+    }
+
+    .timeline-step.current {
+      color: var(--text-primary);
+    }
+
+    .timeline-step.current::before {
+      background: var(--drift);
+      border-color: var(--drift);
+    }
+
+    .timeline-label {
+      display: block;
+    }
+
+    .timeline-content {
+      display: grid;
+      gap: 26px;
+    }
+
+    .stage {
+      position: relative;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(48, 48, 44, 0.7);
+      animation: fadeUp 180ms ease both;
+    }
+
+    .stage:last-child {
+      border-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    .stage-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 16px;
+    }
+
+    .stage-head h2 {
+      margin: 5px 0 0;
+      font-size: 1.2rem;
+      letter-spacing: -0.02em;
+    }
+
+    .stage-copy {
+      margin: 6px 0 0;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      max-width: 46rem;
+    }
+
+    .status-pill {
+      border: 1px solid var(--border);
+      padding: 8px 10px;
+      color: var(--text-secondary);
+      font-size: 0.72rem;
+      align-self: start;
+      white-space: nowrap;
+    }
+
+    .status-pill.fail {
+      color: var(--failure);
+      border-color: rgba(245, 101, 101, 0.45);
+    }
+
+    .status-pill.warn {
+      color: var(--drift);
+      border-color: rgba(255, 107, 53, 0.45);
+    }
+
+    .status-pill.success {
+      color: var(--verified);
+      border-color: rgba(104, 211, 145, 0.45);
+    }
+
+    .initial-metadata,
+    .config-grid,
+    .metric-grid,
+    .source-grid,
+    .finding-grid,
+    .tracked-grid,
+    .verify-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .initial-metadata,
+    .metric-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .config-grid,
+    .source-grid,
+    .tracked-grid,
+    .verify-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .input-shell,
+    .config-box,
+    .evidence-pane {
+      padding: 12px;
+    }
+
+    label {
+      display: block;
+      margin: 0 0 8px;
+      color: var(--text-secondary);
+      font-size: 0.74rem;
+    }
+
+    textarea,
+    input {
+      width: 100%;
+      border: 1px solid var(--border);
+      background: var(--background);
+      color: var(--text-primary);
+      padding: 11px 12px;
+      font: inherit;
+      border-radius: 2px;
+    }
+
+    textarea {
+      min-height: 210px;
+      resize: vertical;
+    }
+
+    input:focus,
+    textarea:focus,
+    button:focus-visible {
+      outline: none;
+      border-color: var(--drift);
+      box-shadow: 0 0 0 1px rgba(255, 107, 53, 0.2);
+    }
+
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    button {
+      appearance: none;
+      border: 1px solid var(--drift);
+      background: var(--drift);
+      color: #140d09;
+      padding: 11px 14px;
+      border-radius: 2px;
+      cursor: pointer;
+      font: 700 0.76rem var(--mono);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
+    }
+
+    button.secondary {
+      background: transparent;
+      color: var(--text-primary);
+      border-color: var(--border);
+    }
+
+    button:hover:not(:disabled) {
+      background: #ff7f52;
+      border-color: #ff7f52;
+    }
+
+    button.secondary:hover:not(:disabled) {
+      background: var(--surface-raised);
+      border-color: var(--text-secondary);
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+
+    .evidence-pane {
+      overflow: hidden;
+    }
+
+    .pane-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+      color: var(--text-secondary);
+      font-size: 0.72rem;
+    }
+
+    pre {
+      margin: 0;
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      line-height: 1.55;
+      white-space: pre;
+      overflow: auto;
+      max-height: 420px;
+      color: var(--text-primary);
+    }
+
+    .metric-grid {
+      margin: 14px 0;
+    }
+
+    .finding-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      margin-top: 14px;
+    }
+
+    .finding-group h3 {
+      margin: 0 0 10px;
+      font-size: 0.84rem;
+      color: var(--text-primary);
+      font-family: var(--mono);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .finding-group {
+      display: grid;
+      gap: 10px;
+    }
+
+    .finding {
+      padding: 10px;
+    }
+
+    .find-state {
+      font-size: 0.7rem;
+      margin-bottom: 8px;
+    }
+
+    .find-state.stale { color: var(--failure); }
+    .find-state.current { color: var(--verified); }
+    .find-state.neutral { color: var(--warning); }
+
+    .find-path,
+    .find-term,
+    .find-line {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      word-break: break-word;
+    }
+
+    .find-line {
+      color: var(--text-secondary);
+      margin-top: 6px;
+    }
+
+    .eval-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .eval-row {
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .eval-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: start;
+    }
+
+    .eval-id {
+      color: var(--text-secondary);
+      font-size: 0.72rem;
+      margin-bottom: 5px;
+    }
+
+    .eval-state {
+      font-family: var(--mono);
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .eval-state.fail { color: var(--failure); }
+    .eval-state.pass { color: var(--verified); }
+    .eval-state.pending { color: var(--text-secondary); }
+
+    .meter {
+      height: 5px;
+      border: 1px solid var(--border);
+      background: var(--background);
+    }
+
+    .meter > span {
+      display: block;
+      height: 100%;
+      background: var(--verified);
+      transition: width 180ms ease;
+    }
+
+    .meter.fail > span {
+      background: var(--failure);
+    }
+
+    .eval-columns {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .eval-box {
+      border: 1px solid var(--border);
+      padding: 10px;
+      background: rgba(255,255,255,0.01);
+    }
+
+    .eval-box strong {
+      display: block;
+      margin-bottom: 6px;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
+
+    .eval-meta {
+      color: var(--text-secondary);
+      font-size: 0.77rem;
+      line-height: 1.5;
+    }
+
+    .diff-shell {
+      margin-top: 14px;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .tiny {
+      color: var(--text-secondary);
+      font-size: 0.7rem;
+    }
+
+    .verified-summary {
+      border: 1px solid rgba(104, 211, 145, 0.35);
+      background: rgba(104, 211, 145, 0.06);
+      padding: 14px;
+      margin-top: 14px;
+    }
+
+    .verified-summary h3 {
+      margin: 0 0 12px;
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--verified);
+    }
+
+    .verify-grid {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+
+    .verify-cell {
+      border: 1px solid rgba(104, 211, 145, 0.22);
+      padding: 10px;
+    }
+
+    .verify-cell .metric-label {
+      color: #b0cbb9;
+    }
+
+    .verify-cell .metric-value {
+      color: var(--text-primary);
+      font-size: 0.95rem;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(255, 107, 53, 0.18); }
+      50% { opacity: 0.72; box-shadow: 0 0 0 6px rgba(255, 107, 53, 0); }
+    }
+
+    @keyframes scan {
+      from { transform: translateX(-100%); }
+      to { transform: translateX(100%); }
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 980px) {
+      .summary-grid,
+      .config-grid,
+      .source-grid,
+      .tracked-grid,
+      .metric-grid,
+      .finding-grid,
+      .verify-grid,
+      .initial-metadata,
+      .eval-columns {
+        grid-template-columns: 1fr;
+      }
+
+      .investigation {
+        grid-template-columns: 1fr;
+      }
+
+      .timeline-rail {
+        position: static;
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 10px;
+        padding-top: 0;
+      }
+
+      .timeline-rail::before {
+        display: none;
+      }
+
+      .timeline-step {
+        padding: 22px 8px 0 0;
+      }
+
+      .timeline-step::before {
+        left: 0;
+      }
+    }
+
+    @media (max-width: 700px) {
+      .workspace {
+        padding: 18px 14px 44px;
+      }
+
+      .header,
+      .stage-head,
+      .brandline,
+      .eval-top {
+        grid-template-columns: 1fr;
+        flex-direction: column;
+      }
+
+      .button-row {
+        flex-direction: column;
+      }
+
+      button {
+        width: 100%;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation: none !important;
+        transition: none !important;
+      }
+    }
   </style>
 </head>
 <body>
-<header>
-  <h1>Stale AI</h1>
-  <p>Turn documentation changes into agent regressions, evidence, and repairs.</p>
-</header>
-<main>
-  <section class="card">
-    <h2>0. Track a docs URL</h2>
-    <p class="small">Optional. For live URL monitoring. Skip this for the bundled demo.</p>
-    <div class="grid">
+  <main class="workspace">
+    <header class="header">
       <div>
-        <label>Docs URL</label>
-        <input id="trackUrl" placeholder="https://..." />
-      </div>
-      <div>
-        <label>Optional label</label>
-        <input id="trackLabel" placeholder="Documentation source" />
-      </div>
-    </div>
-    <div class="grid">
-      <div>
-        <label>Authority</label>
-        <input id="trackAuthority" type="number" min="0" max="1" step="0.05" value="0.9" />
-      </div>
-      <div>
-        <label>Last tracked preview</label>
-        <pre id="trackPreview">No tracked source yet.</pre>
-      </div>
-    </div>
-    <button onclick="trackSource()">Track</button>
-    <button class="secondary" onclick="checkSource()">Check now</button>
-    <div id="trackStatus" class="small"></div>
-    <div id="trackedChangeSection" class="hidden">
-      <h3>Tracked change</h3>
-      <div id="trackedMetrics" class="metric-row"></div>
-      <div class="grid">
-        <div>
-          <label>Previous snapshot</label>
-          <pre id="trackedOldText"></pre>
+        <div class="brandline">
+          <span>STALE/AI</span>
+          <span>Build 0.1.0</span>
         </div>
+        <h1><span class="stale-word">STALE</span>/AI</h1>
+        <p class="tagline">Your sources changed.<br />Your agent did not.</p>
+      </div>
+      <aside class="incident-box">
+        <div class="incident-meta">Investigation #00017</div>
+        <strong id="incidentStatusTitle">Status: Ready</strong>
+        <div class="tiny">A source changed -> stale code showed up -> the agent failed -> a fix was generated -> the agent was checked again.</div>
+        <div class="status-row">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="incidentStatusLine" class="mono-label">Ready to investigate</span>
+        </div>
+      </aside>
+    </header>
+
+    <div id="fastDemoBadge" class="fast-demo-badge hidden">
+      <span class="fast-demo-title">Fast demo mode</span>
+      <span class="fast-demo-sub">Deterministic execution &middot; 1 trial per evaluation</span>
+    </div>
+
+    <section id="summaryPanel" class="summary">
+      <div class="summary-grid">
         <div>
-          <label>Current snapshot</label>
-          <pre id="trackedNewText"></pre>
+          <div id="summaryKicker" class="summary-kicker mono-label">Investigation</div>
+          <h2 id="summaryHeadline" class="summary-headline">Compare a trusted source with its updated version.</h2>
+          <p id="summaryCopy" class="summary-copy">Compare source changes, find affected code, test the agent, review the fix, and confirm the result.</p>
+        </div>
+        <div class="summary-meta">
+          <div class="meta-box">
+            <span class="metric-label">Source Type</span>
+            <div class="metric-value mono">Document</div>
+          </div>
+          <div class="meta-box">
+            <span class="metric-label">Run Mode</span>
+            <div class="metric-value mono">Local</div>
+          </div>
+          <div class="meta-box">
+            <span class="metric-label">Status</span>
+            <div id="summaryStatusValue" class="metric-value mono">Ready</div>
+          </div>
+          <div class="meta-box">
+            <span class="metric-label">Source</span>
+            <div id="statSource" class="metric-value mono">Not loaded</div>
+          </div>
+          <div class="meta-box">
+            <span class="metric-label">Blast Radius</span>
+            <div id="statFiles" class="metric-value">0 files</div>
+          </div>
+          <div class="meta-box">
+            <span class="metric-label">Evaluations</span>
+            <div id="statPassing" class="metric-value">0 / 0</div>
+          </div>
         </div>
       </div>
-      <pre id="trackedAnalysis"></pre>
-    </div>
-  </section>
+    </section>
 
-  <section class="card">
-    <h2>1. Detect a material change</h2>
-    <p class="small">Paste documentation text directly. These boxes are not file uploads.</p>
-    <div>
-      <button class="secondary" onclick="loadOpenAIDemo()">Load OpenAI demo</button>
-      <span class="small">Fills both boxes and the repo fields with the bundled OpenAI SDK example. No file upload needed.</span>
-    </div>
-    <div id="demoStatus" class="small"></div>
-    <div class="grid">
-      <div>
-        <label>Previous documentation</label>
-        <textarea id="oldText" placeholder="Paste the previous documentation text."></textarea>
+    <div class="investigation">
+      <aside class="timeline-rail">
+        <div id="timeline-1" class="timeline-step current">
+          <span class="timeline-label">01 Source Change</span>
+        </div>
+        <div id="timeline-2" class="timeline-step">
+          <span class="timeline-label">02 Code Impact</span>
+        </div>
+        <div id="timeline-3" class="timeline-step">
+          <span class="timeline-label">03 Agent Failure</span>
+        </div>
+        <div id="timeline-4" class="timeline-step">
+          <span class="timeline-label">04 Repair</span>
+        </div>
+        <div id="timeline-5" class="timeline-step">
+          <span class="timeline-label">05 Verification</span>
+        </div>
+      </aside>
+
+      <div class="timeline-content">
+        <section class="stage">
+          <div class="stage-head">
+            <div>
+              <div class="timeline-index mono-label">Initial State</div>
+              <h2>Start an investigation</h2>
+              <p class="stage-copy">Compare a trusted source with its updated version and trace the impact through your agent.</p>
+            </div>
+            <div class="status-pill">Ready</div>
+          </div>
+
+          <div class="initial-metadata">
+            <div class="config-box">
+              <span class="metric-label">Source Type</span>
+              <div class="metric-value mono">Document</div>
+            </div>
+            <div class="config-box">
+              <span class="metric-label">Run Mode</span>
+              <div class="metric-value mono">Local</div>
+            </div>
+            <div class="config-box">
+              <span class="metric-label">Status</span>
+              <div class="metric-value mono">Ready</div>
+            </div>
+          </div>
+
+          <div class="config-grid" style="margin-top:14px;">
+            <div class="input-shell">
+              <label class="mono-label" for="trackUrl">Docs URL</label>
+              <input id="trackUrl" placeholder="https://..." />
+            </div>
+            <div class="input-shell">
+              <label class="mono-label" for="trackLabel">Optional Label</label>
+              <input id="trackLabel" placeholder="Documentation source" />
+            </div>
+          </div>
+
+          <div class="config-grid">
+            <div class="input-shell">
+              <label class="mono-label" for="trackAuthority">Authority</label>
+              <input id="trackAuthority" type="number" min="0" max="1" step="0.05" value="0.9" />
+            </div>
+            <div class="evidence-pane">
+              <div class="pane-head">
+                <span class="mono-label">Tracked Preview</span>
+              </div>
+              <pre id="trackPreview">No tracked source yet.</pre>
+            </div>
+          </div>
+
+          <div class="button-row">
+            <button class="secondary" onclick="trackSource()">Track Source</button>
+            <button class="secondary" onclick="checkSource()">Check Source</button>
+            <button onclick="loadOpenAIDemo()">Load OpenAI Demo</button>
+          </div>
+          <div id="trackStatus" class="tiny" style="margin-top:10px;"></div>
+          <div id="demoStatus" class="tiny" style="margin-top:6px;"></div>
+
+          <div id="trackedChangeSection" class="hidden">
+            <div id="trackedMetrics" class="metric-grid"></div>
+            <div class="tracked-grid">
+              <div class="evidence-pane">
+                <div class="pane-head"><span class="mono-label">Previous Snapshot</span></div>
+                <pre id="trackedOldText"></pre>
+              </div>
+              <div class="evidence-pane">
+                <div class="pane-head"><span class="mono-label">Current Snapshot</span></div>
+                <pre id="trackedNewText"></pre>
+              </div>
+            </div>
+            <div class="evidence-pane" style="margin-top:12px;">
+              <div class="pane-head"><span class="mono-label">Tracked Analysis</span></div>
+              <pre id="trackedAnalysis"></pre>
+            </div>
+          </div>
+        </section>
+
+        <section class="stage">
+          <div class="stage-head">
+            <div>
+              <div class="timeline-index mono-label">01 Source Drift</div>
+              <h2>Analyze the source change</h2>
+              <p class="stage-copy">Detect the change, show the raw evidence, and start the investigation from the source itself.</p>
+            </div>
+            <div id="stage1Status" class="status-pill warn">Waiting</div>
+          </div>
+
+          <div class="source-grid">
+            <div class="input-shell">
+              <label class="mono-label" for="oldText">Old Source</label>
+              <textarea id="oldText" placeholder="Paste the previous documentation text."></textarea>
+            </div>
+            <div class="input-shell">
+              <label class="mono-label" for="newText">Updated Source</label>
+              <textarea id="newText" placeholder="Paste the current documentation text."></textarea>
+            </div>
+          </div>
+
+          <div class="config-grid" style="margin-top:12px;">
+            <div class="input-shell">
+              <label class="mono-label" for="sourceName">Source Name</label>
+              <input id="sourceName" value="Official documentation" />
+            </div>
+          </div>
+
+          <div class="button-row">
+            <button onclick="analyzeChange()">Analyze Source</button>
+          </div>
+
+          <div id="analysisSection" class="hidden">
+            <div id="analysisMetrics" class="metric-grid"></div>
+            <div class="source-grid" style="margin-top:14px;">
+              <div class="evidence-pane">
+                <div class="pane-head">
+                  <span class="mono-label">Change Details</span>
+                </div>
+                <pre id="analysisOutput"></pre>
+              </div>
+              <div class="evidence-pane">
+                <div class="pane-head">
+                  <span class="mono-label">Source Diff</span>
+                  <span class="tiny">Removed / Added / Changed</span>
+                </div>
+                <pre id="analysisDiff">No diff yet.</pre>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="stage">
+          <div class="stage-head">
+            <div>
+              <div class="timeline-index mono-label">02 Code Impact</div>
+              <h2>Find affected code</h2>
+              <p class="stage-copy">Inspect the repository and isolate the stale references that actually need attention.</p>
+            </div>
+            <div id="stage2Status" class="status-pill">Waiting</div>
+          </div>
+
+          <div class="config-grid">
+            <div class="input-shell">
+              <label class="mono-label" for="repoPath">Repository Path</label>
+              <input id="repoPath" value="sample_target_openai" />
+            </div>
+          </div>
+
+          <div class="button-row">
+            <button onclick="scanRepo()">Trace Impact</button>
+          </div>
+
+          <div id="scanSection" class="hidden">
+            <div id="scanMetrics" class="metric-grid"></div>
+            <div id="scanOutput" class="finding-grid"></div>
+          </div>
+        </section>
+
+        <section class="stage">
+          <div class="stage-head">
+            <div>
+              <div class="timeline-index mono-label">03 Agent Failure</div>
+              <h2>Show the agent failure</h2>
+              <p class="stage-copy">Use evaluations to prove the source change caused a real behavior problem.</p>
+            </div>
+            <div id="stage3Status" class="status-pill">Waiting</div>
+          </div>
+
+          <div class="config-grid">
+            <div class="input-shell">
+              <label class="mono-label" for="agentScript">Agent Entrypoint</label>
+              <input id="agentScript" value="agent.py" />
+            </div>
+            <div class="input-shell">
+              <label class="mono-label" for="runsPerEval">Evaluation Trials</label>
+              <input id="runsPerEval" type="number" min="1" max="10" step="1" value="3" />
+            </div>
+          </div>
+
+          <div class="button-row">
+            <button onclick="generateEvals()">Generate Evaluations</button>
+            <button id="runEvalsButton" class="secondary" onclick="runEvals()">Run Evaluations</button>
+          </div>
+
+          <div id="evalSection" class="hidden">
+            <div id="evalMetrics" class="metric-grid"></div>
+            <div id="evalOutput" class="eval-list"></div>
+          </div>
+        </section>
+
+        <section class="stage">
+          <div class="stage-head">
+            <div>
+              <div class="timeline-index mono-label">04 Repair</div>
+              <h2>Generate the fix</h2>
+              <p class="stage-copy">Put the Git diff front and center so the proposed fix is easy to inspect.</p>
+            </div>
+            <div id="stage4Status" class="status-pill">Waiting</div>
+          </div>
+
+          <div class="button-row">
+            <button onclick="repair(true)">Generate Patch</button>
+            <button class="secondary" onclick="repair(false)">Repair Plan Only</button>
+            <button class="secondary" onclick="resetSample()">Reset Demo</button>
+          </div>
+
+          <div class="diff-shell">
+            <div class="evidence-pane">
+              <div class="pane-head">
+                <span class="mono-label">Proposed Patch</span>
+                <span id="repairMeta" class="tiny">No patch generated</span>
+              </div>
+              <pre id="repairDiff">NO PATCH GENERATED</pre>
+            </div>
+          </div>
+
+          <div class="evidence-pane" style="margin-top:12px;">
+            <div class="pane-head">
+              <span class="mono-label">Repair Output</span>
+            </div>
+            <pre id="repairOutput">No proposed patch yet.</pre>
+          </div>
+        </section>
+
+        <section class="stage">
+          <div class="stage-head">
+            <div>
+              <div class="timeline-index mono-label">05 Verification</div>
+              <h2>Confirm the fix</h2>
+              <p class="stage-copy">Re-run evaluations after repair and close things out only when the agent passes again.</p>
+            </div>
+            <div id="stage5Status" class="status-pill">Waiting</div>
+          </div>
+
+          <div id="verificationSection" class="evidence-pane">
+            <div class="pane-head">
+              <span class="mono-label">Verification State</span>
+            </div>
+            <pre id="verificationOutput">No verification yet.</pre>
+          </div>
+
+          <div id="verifiedSummary" class="verified-summary hidden">
+            <h3>Final Summary</h3>
+            <div class="verify-grid">
+              <div class="verify-cell">
+                <span class="metric-label">Source Drift</span>
+                <div id="verifyDrift" class="metric-value">Open</div>
+              </div>
+              <div class="verify-cell">
+                <span class="metric-label">Blast Radius</span>
+                <div id="verifyBlast" class="metric-value">0 files</div>
+              </div>
+              <div class="verify-cell">
+                <span class="metric-label">Patch</span>
+                <div id="verifyPatch" class="metric-value">Pending</div>
+              </div>
+              <div class="verify-cell">
+                <span class="metric-label">Evaluations</span>
+                <div id="verifyEvals" class="metric-value">0 / 0</div>
+              </div>
+              <div class="verify-cell">
+                <span class="metric-label">Status</span>
+                <div id="verifyStatus" class="metric-value">Open</div>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
-      <div>
-        <label>Current documentation</label>
-        <textarea id="newText" placeholder="Paste the current documentation text."></textarea>
-      </div>
     </div>
-    <label>Source name</label>
-    <input id="sourceName" value="Official documentation" />
-    <button onclick="analyzeChange()">Analyze change</button>
-    <div id="analysisSection" class="hidden">
-      <h3>Change record</h3>
-      <div id="analysisMetrics" class="metric-row"></div>
-      <pre id="analysisOutput"></pre>
-    </div>
-  </section>
+  </main>
 
-  <section class="card">
-    <h2>2. Find affected agent components</h2>
-    <label>Repository path</label>
-    <input id="repoPath" value="sample_target_openai" />
-    <button onclick="scanRepo()">Scan repository</button>
-    <div id="scanSection" class="hidden">
-      <div id="scanMetrics" class="metric-row"></div>
-      <pre id="scanOutput"></pre>
-    </div>
-  </section>
+  <script>
+    let analysis = null;
+    let scan = null;
+    let evaluations = [];
+    let runResults = null;
+    let repairState = null;
 
-  <section class="card">
-    <h2>3. Generate and run regression evaluations</h2>
-    <button onclick="generateEvals()">Generate evals</button>
-    <label>Agent script inside repository</label>
-    <input id="agentScript" value="agent.py" />
-    <label>Trials per evaluation</label>
-    <input id="runsPerEval" type="number" min="1" max="10" step="1" value="3" />
-    <button onclick="runEvals()">Run evals</button>
-    <div id="evalSection" class="hidden">
-      <div id="evalMetrics" class="metric-row"></div>
-      <div id="evalOutput"></div>
-    </div>
-  </section>
-
-  <section class="card">
-    <h2>4. Repair with Codex</h2>
-    <p class="small">Codex proposes a patch inside the selected repository using a workspace-write sandbox. For the bundled OpenAI migration demo, Stale AI can also apply a deterministic fallback repair when Codex is unavailable.</p>
-    <button onclick="repair(true)">Run Codex repair</button>
-    <button class="secondary" onclick="repair(false)">Generate repair plan only</button>
-    <button class="secondary" onclick="resetSample()">Reset sample</button>
-    <pre id="repairOutput">No proposed patch yet.</pre>
-  </section>
-</main>
-
-<script>
-let analysis = null;
-let scan = null;
-let evaluations = [];
-let runResults = null;
-
-async function post(url, body) {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify(body)
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || JSON.stringify(data));
-  return data;
-}
-
-function metric(label, value) {
-  return `<div class="metric"><span class="small">${label}</span><b>${value}</b></div>`;
-}
-
-async function loadOpenAIDemo() {
-  try {
-    const response = await fetch("/api/demo/openai");
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || JSON.stringify(data));
-    document.getElementById("oldText").value = data.old_text;
-    document.getElementById("newText").value = data.new_text;
-    const sourceNameInput = document.getElementById("sourceName");
-    if (sourceNameInput) sourceNameInput.value = data.source_name;
-    document.getElementById("repoPath").value = data.repo_path;
-    document.getElementById("agentScript").value = data.agent_script;
-    document.getElementById("demoStatus").textContent = "OpenAI demo loaded. Now click Analyze.";
-  } catch (e) { alert(e.message); }
-}
-
-function setAnalysis(nextAnalysis) {
-  analysis = nextAnalysis;
-  document.getElementById("analysisSection").classList.remove("hidden");
-  scan = null;
-  evaluations = [];
-  runResults = null;
-  document.getElementById("analysisMetrics").innerHTML =
-    metric("Decision", analysis.decision) +
-    metric("Score", analysis.danger_score) +
-    metric("Model", analysis.used_model ? "GPT-5.6" : "Fallback");
-  document.getElementById("analysisOutput").textContent =
-    JSON.stringify(analysis.change, null, 2);
-}
-
-async function trackSource() {
-  const url = document.getElementById("trackUrl").value.trim();
-  if (!url) return alert("Enter a docs URL first.");
-  try {
-    const result = await post("/api/sources/track", {
-      url,
-      label: document.getElementById("trackLabel").value.trim() || null,
-      authority: Number(document.getElementById("trackAuthority").value)
-    });
-    document.getElementById("trackPreview").textContent = result.preview || "No text extracted.";
-    document.getElementById("trackStatus").textContent = `Tracking baseline saved for ${result.label}.`;
-    document.getElementById("trackedChangeSection").classList.add("hidden");
-  } catch (e) { alert(e.message); }
-}
-
-async function checkSource() {
-  const url = document.getElementById("trackUrl").value.trim();
-  if (!url) return alert("Enter a tracked docs URL first.");
-  try {
-    const result = await post("/api/sources/check", {
-      url,
-      label: document.getElementById("trackLabel").value.trim() || null,
-      authority: Number(document.getElementById("trackAuthority").value)
-    });
-    if (!result.changed) {
-      document.getElementById("trackStatus").textContent = `No material change detected for ${result.url}.`;
-      document.getElementById("trackedChangeSection").classList.add("hidden");
-      return;
+    async function loadAppConfig() {
+      try {
+        const response = await fetch("/api/config");
+        const data = await response.json();
+        if (data.fast_demo) {
+          document.getElementById("fastDemoBadge").classList.remove("hidden");
+          const runsInput = document.getElementById("runsPerEval");
+          if (runsInput) runsInput.value = 1;
+        }
+      } catch (e) {
+        // Non-fatal: the dashboard still works without the fast-demo badge.
+      }
     }
 
-    document.getElementById("trackPreview").textContent = (result.new_text || "").slice(0, 500) || "No text extracted.";
-    document.getElementById("trackStatus").textContent =
-      `Change detected for ${result.url}. The current analysis is ready for scan, eval, and repair steps.`;
-    document.getElementById("trackedChangeSection").classList.remove("hidden");
-    document.getElementById("trackedMetrics").innerHTML =
-      metric("Change", "Detected") +
-      metric("Old SHA", result.old_sha.slice(0, 12)) +
-      metric("New SHA", result.new_sha.slice(0, 12)) +
-      metric("Danger score", result.analysis.danger_score);
-    document.getElementById("trackedOldText").textContent = result.old_text || "";
-    document.getElementById("trackedNewText").textContent = result.new_text || "";
-    document.getElementById("trackedAnalysis").textContent = JSON.stringify(result.analysis.change, null, 2);
-    document.getElementById("sourceName").value =
-      document.getElementById("trackLabel").value.trim() || "Official documentation";
-    document.getElementById("oldText").value = result.old_text || "";
-    document.getElementById("newText").value = result.new_text || "";
-    setAnalysis(result.analysis);
-  } catch (e) { alert(e.message); }
-}
+    async function post(url, body) {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(body)
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || JSON.stringify(data));
+      return data;
+    }
 
-async function analyzeChange() {
-  try {
-    const result = await post("/api/analyze", {
-      source_name: document.getElementById("sourceName").value,
-      old_text: document.getElementById("oldText").value,
-      new_text: document.getElementById("newText").value,
-      source_authority: 0.95
-    });
-    setAnalysis(result);
-  } catch (e) { alert(e.message); }
-}
+    function metric(label, value, mono = false) {
+      return `<div class="config-box"><span class="metric-label">${escapeHtml(String(label))}</span><div class="metric-value${mono ? " mono" : ""}">${escapeHtml(String(value))}</div></div>`;
+    }
 
-async function scanRepo() {
-  if (!analysis) return alert("Analyze the change first.");
-  try {
-    scan = await post("/api/scan", {
-      repo_path: document.getElementById("repoPath").value,
-      change: analysis.change
-    });
-    document.getElementById("scanSection").classList.remove("hidden");
-    document.getElementById("scanMetrics").innerHTML =
-      metric("References", scan.reference_count) +
-      metric("Files", scan.impacted_files.length) +
-      metric("Adjusted score", scan.adjusted_score);
-    document.getElementById("scanOutput").textContent =
-      JSON.stringify(scan.matches, null, 2);
-  } catch (e) { alert(e.message); }
-}
+    function setBusy(isBusy) {
+      document.getElementById("summaryPanel").classList.toggle("running", isBusy);
+    }
 
-async function generateEvals() {
-  if (!analysis) return alert("Analyze the change first.");
-  try {
-    const result = await post("/api/generate-evals", {
-      change: analysis.change,
-      matches: scan ? scan.matches : [],
-      count: 3
-    });
-    evaluations = result.evaluations;
-    document.getElementById("evalSection").classList.remove("hidden");
-    document.getElementById("evalMetrics").innerHTML =
-      metric("Evaluations", evaluations.length) +
-      metric("Generator", result.used_model ? "GPT-5.6" : "Fallback");
-    document.getElementById("evalOutput").innerHTML = evaluations.map(e =>
-      `<div class="eval"><b>${e.name}</b><div>${e.prompt}</div>
-       <div class="small">Require: ${e.required_substrings.join(", ") || "none"} |
-       Forbid: ${e.forbidden_substrings.join(", ") || "none"}</div></div>`
-    ).join("");
-  } catch (e) { alert(e.message); }
-}
+    function formatDecision(value) {
+      return String(value || "").replace(/_/g, " ").toUpperCase();
+    }
 
-async function runEvals() {
-  if (!evaluations.length) return alert("Generate evaluations first.");
-  try {
-    runResults = await post("/api/run-evals", {
-      repo_path: document.getElementById("repoPath").value,
-      agent_script: document.getElementById("agentScript").value,
-      evaluations: evaluations,
-      change: analysis.change,
-      timeout_seconds: 15,
-      runs_per_eval: Number(document.getElementById("runsPerEval").value)
-    });
-    document.getElementById("evalSection").classList.remove("hidden");
-    document.getElementById("evalMetrics").innerHTML =
-      metric("Passed", runResults.passed) +
-      metric("Failed", runResults.failed) +
-      metric("Pass rate", runResults.pass_rate) +
-      metric("Avg Brier", runResults.average_brier_score);
-    document.getElementById("evalOutput").innerHTML = runResults.results.map(r =>
-      `<div class="eval"><span class="status ${r.passed ? "pass" : "fail"}">${r.passed ? "PASS" : "FAIL"}</span>
-       <b> ${r.name}</b><pre>${escapeHtml(r.output)}</pre>
-       <div class="small">Trials: ${r.passed_runs}/${r.total_runs} |
-       Pass rate: ${r.pass_rate} |
-       Wilson: ${r.wilson_low}-${r.wilson_high} |
-       Brier: ${r.brier_score} |
-       Missing: ${r.missing_required.join(", ") || "none"} |
-       Forbidden found: ${r.found_forbidden.join(", ") || "none"} |
-       Judge: ${r.judge_passed === null ? "not run" : (r.judge_passed ? "pass" : "fail")} |
-       Reason: ${escapeHtml(r.judge_reason || "n/a")} ${r.error || ""}</div></div>`
-    ).join("");
-  } catch (e) { alert(e.message); }
-}
+    function normalizeTerm(value) {
+      return String(value || "").trim().toLowerCase();
+    }
 
-async function repair(runCodex) {
-  if (!analysis || !runResults) return alert("Analyze and run evaluations first.");
-  try {
-    const result = await post("/api/repair", {
-      repo_path: document.getElementById("repoPath").value,
-      change: analysis.change,
-      failures: runResults.results,
-      matches: scan ? scan.matches : [],
-      run_codex: runCodex
-    });
-    document.getElementById("repairOutput").textContent =
-      `Proposed patch status: ${result.status}\n${result.message}\n\nGIT DIFF\n${result.git_diff || "(no diff yet)"}\n\nRUN OUTPUT\n${result.codex_output}`;
-  } catch (e) { alert(e.message); }
-}
+    function staleMatchSet() {
+      const deprecated = new Set((analysis?.change?.deprecated_terms || []).map(normalizeTerm));
+      const oldBehavior = normalizeTerm(analysis?.change?.old_behavior || "");
+      return {deprecated, oldBehavior};
+    }
 
-async function resetSample() {
-  await post("/api/reset-sample", {});
-  alert("Sample agent reset.");
-}
+    function currentMatchSet() {
+      return new Set((analysis?.change?.replacement_terms || []).map(normalizeTerm));
+    }
 
-function escapeHtml(value) {
-  return value.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]));
-}
-</script>
+    function classifyMatch(match) {
+      const term = normalizeTerm(match.matched_term);
+      const {deprecated, oldBehavior} = staleMatchSet();
+      const current = currentMatchSet();
+      const line = normalizeTerm(match.text);
+      if (deprecated.has(term) || (oldBehavior && line.includes(oldBehavior))) return "stale";
+      if (current.has(term)) return "current";
+      return "unrelated";
+    }
+
+    function staleMatches() {
+      return scan ? scan.matches.filter(match => classifyMatch(match) === "stale") : [];
+    }
+
+    function staleFileCount() {
+      return new Set(staleMatches().map(match => match.file)).size;
+    }
+
+    function evalSummaryText() {
+      return runResults ? `${runResults.passed} / ${runResults.results.length}` : `0 / ${evaluations.length || 0}`;
+    }
+
+    function setTimelineState(step, state) {
+      const node = document.getElementById(`timeline-${step}`);
+      if (!node) return;
+      node.className = `timeline-step ${state}`.trim();
+    }
+
+    function updateTimeline() {
+      const verified = runResults && runResults.results.length && runResults.passed === runResults.results.length;
+      setTimelineState(1, analysis ? "complete" : "current");
+      setTimelineState(2, scan ? "complete" : analysis ? "current" : "");
+      setTimelineState(3, runResults ? (verified ? "complete" : "current") : evaluations.length ? "current" : "");
+      setTimelineState(4, repairState ? "complete" : runResults ? "current" : "");
+      setTimelineState(5, verified ? "complete" : repairState ? "current" : "");
+    }
+
+    function setStageStatus(id, text, tone = "") {
+      const el = document.getElementById(id);
+      el.textContent = text;
+      el.className = `status-pill${tone ? ` ${tone}` : ""}`;
+    }
+
+    function updateHeaderStatus() {
+      let title = "Status: Ready";
+      let line = "Ready to investigate";
+      let summaryStatus = "Ready";
+
+      if (analysis) {
+        title = "Status: Investigating";
+        line = "Source change found";
+        summaryStatus = "Investigating";
+      }
+      if (runResults) {
+        title = runResults.passed === runResults.results.length ? "Status: Verified" : "Status: Investigating";
+        line = runResults.passed === runResults.results.length ? "Fix confirmed" : "Agent failure confirmed";
+        summaryStatus = runResults.passed === runResults.results.length ? "Verified" : "Agent failure";
+      }
+      if (repairState && !runResults) {
+        title = "Status: Repairing";
+        line = "Fix generated";
+        summaryStatus = "Repairing";
+      }
+
+      document.getElementById("incidentStatusTitle").textContent = title;
+      document.getElementById("incidentStatusLine").textContent = line;
+      document.getElementById("summaryStatusValue").textContent = summaryStatus;
+    }
+
+    function updateSummary() {
+      const sourceName = document.getElementById("sourceName").value.trim() || "Official documentation";
+      let headline = "Compare a trusted source with its updated version.";
+      let copy = "Trace source drift through code impact, behavior failure, repair, and verification.";
+      let kicker = "Investigation";
+
+      if (analysis) {
+        headline = "Change detected in a trusted source.";
+        copy = `${sourceName} now has visible source drift evidence and is ready for impact tracing.`;
+        kicker = "Source change";
+      }
+
+      if (runResults) {
+        if (runResults.passed === runResults.results.length) {
+          headline = "Agent current.";
+          copy = `Verified against ${sourceName}. The incident can be closed.`;
+          kicker = "Fix confirmed";
+        } else {
+          headline = "Agent failure confirmed.";
+          copy = `${sourceName} caused a reproducible stale-agent failure under the current evaluation set.`;
+          kicker = "Agent failure";
+        }
+      }
+
+      document.getElementById("summaryKicker").textContent = kicker;
+      document.getElementById("summaryHeadline").textContent = headline;
+      document.getElementById("summaryCopy").textContent = copy;
+      document.getElementById("statSource").textContent = sourceName;
+      document.getElementById("statFiles").textContent = `${staleFileCount()} files`;
+      document.getElementById("statPassing").textContent = evalSummaryText();
+      document.getElementById("runEvalsButton").textContent = repairState ? "Verify Repair" : "Run Evaluations";
+      updateHeaderStatus();
+      updateTimeline();
+      updateVerificationSummary();
+    }
+
+    function updateVerificationSummary() {
+      const verificationOutput = document.getElementById("verificationOutput");
+      const verifiedSummary = document.getElementById("verifiedSummary");
+      const total = runResults ? runResults.results.length : evaluations.length;
+      const passed = runResults ? runResults.passed : 0;
+      const sourceName = document.getElementById("sourceName").value.trim() || "Official documentation";
+
+      if (!runResults) {
+        verificationOutput.textContent = "No verification yet.";
+        verifiedSummary.classList.add("hidden");
+        setStageStatus("stage5Status", "Waiting");
+        return;
+      }
+
+      const verified = passed === total && total > 0;
+      verificationOutput.textContent = verified
+        ? `AGENT CURRENT\n${passed} / ${total} evaluations passing\n\nVerified against:\n${sourceName}`
+        : `AGENT STATE    STALE\nEVALUATIONS   ${passed} / ${total} PASSING\nFAILURE CONFIDENCE ${(runResults.pass_rate * 100).toFixed(0)}%`;
+
+      setStageStatus("stage5Status", verified ? "Verified" : "Open", verified ? "success" : "warn");
+
+      document.getElementById("verifyDrift").textContent = verified ? "Resolved" : "Open";
+      document.getElementById("verifyBlast").textContent = `${staleFileCount()} files`;
+      document.getElementById("verifyPatch").textContent = repairState?.status === "patched" ? "Applied" : "Pending";
+      document.getElementById("verifyEvals").textContent = `${passed} / ${total}`;
+      document.getElementById("verifyStatus").textContent = verified ? "Closed" : "Open";
+
+      if (verified || repairState) {
+        verifiedSummary.classList.remove("hidden");
+      } else {
+        verifiedSummary.classList.add("hidden");
+      }
+    }
+
+    async function loadOpenAIDemo() {
+      setBusy(true);
+      try {
+        const response = await fetch("/api/demo/openai");
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || JSON.stringify(data));
+        document.getElementById("oldText").value = data.old_text;
+        document.getElementById("newText").value = data.new_text;
+        document.getElementById("sourceName").value = data.source_name;
+        document.getElementById("repoPath").value = data.repo_path;
+        document.getElementById("agentScript").value = data.agent_script;
+        document.getElementById("demoStatus").textContent = "Bundled OpenAI migration incident loaded.";
+        updateSummary();
+      } catch (e) {
+        alert(e.message);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function setAnalysis(nextAnalysis) {
+      analysis = nextAnalysis;
+      scan = null;
+      evaluations = [];
+      runResults = null;
+      repairState = null;
+
+      document.getElementById("analysisSection").classList.remove("hidden");
+      document.getElementById("scanSection").classList.add("hidden");
+      document.getElementById("evalSection").classList.add("hidden");
+      document.getElementById("repairDiff").textContent = "NO PATCH GENERATED";
+      document.getElementById("repairMeta").textContent = "No patch generated";
+      document.getElementById("repairOutput").textContent = "No proposed patch yet.";
+
+      document.getElementById("analysisMetrics").innerHTML =
+        metric("Change Type", formatDecision(analysis.change.change_type), true) +
+        metric("Decision", formatDecision(analysis.decision), true) +
+        metric("Changes Found", analysis.change.evidence.length) +
+        metric("Source Hash", shortHash(document.getElementById("newText").value), true) +
+        metric("Danger Score", analysis.danger_score) +
+        metric("Analysis Path", analysis.used_model ? "GPT-5.6" : "Fallback", true);
+
+      document.getElementById("analysisOutput").textContent = JSON.stringify(analysis.change, null, 2);
+      document.getElementById("analysisDiff").textContent = formatDiff(analysis.raw_diff || []);
+      setStageStatus("stage1Status", "Change detected", "warn");
+      setStageStatus("stage2Status", "Waiting");
+      setStageStatus("stage3Status", "Waiting");
+      setStageStatus("stage4Status", "Waiting");
+      updateSummary();
+    }
+
+    async function trackSource() {
+      const url = document.getElementById("trackUrl").value.trim();
+      if (!url) return alert("Enter a docs URL first.");
+      setBusy(true);
+      try {
+        const result = await post("/api/sources/track", {
+          url,
+          label: document.getElementById("trackLabel").value.trim() || null,
+          authority: Number(document.getElementById("trackAuthority").value)
+        });
+        document.getElementById("trackPreview").textContent = result.preview || "No text extracted.";
+        document.getElementById("trackStatus").textContent = `Tracking baseline saved for ${result.label}.`;
+        document.getElementById("trackedChangeSection").classList.add("hidden");
+      } catch (e) {
+        alert(e.message);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function checkSource() {
+      const url = document.getElementById("trackUrl").value.trim();
+      if (!url) return alert("Enter a tracked docs URL first.");
+      setBusy(true);
+      try {
+        const result = await post("/api/sources/check", {
+          url,
+          label: document.getElementById("trackLabel").value.trim() || null,
+          authority: Number(document.getElementById("trackAuthority").value)
+        });
+        if (!result.changed) {
+          document.getElementById("trackStatus").textContent = `No material change detected for ${result.url}.`;
+          document.getElementById("trackedChangeSection").classList.add("hidden");
+          return;
+        }
+
+        document.getElementById("trackPreview").textContent = (result.new_text || "").slice(0, 500) || "No text extracted.";
+        document.getElementById("trackStatus").textContent = `Change detected for ${result.url}.`;
+        document.getElementById("trackedChangeSection").classList.remove("hidden");
+        document.getElementById("trackedMetrics").innerHTML =
+          metric("Old Hash", result.old_sha.slice(0, 12), true) +
+          metric("New Hash", result.new_sha.slice(0, 12), true) +
+          metric("Danger Score", result.analysis.danger_score);
+        document.getElementById("trackedOldText").textContent = result.old_text || "";
+        document.getElementById("trackedNewText").textContent = result.new_text || "";
+        document.getElementById("trackedAnalysis").textContent = JSON.stringify(result.analysis.change, null, 2);
+        document.getElementById("sourceName").value = document.getElementById("trackLabel").value.trim() || "Official documentation";
+        document.getElementById("oldText").value = result.old_text || "";
+        document.getElementById("newText").value = result.new_text || "";
+        setAnalysis(result.analysis);
+      } catch (e) {
+        alert(e.message);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function analyzeChange() {
+      setBusy(true);
+      try {
+        const result = await post("/api/analyze", {
+          source_name: document.getElementById("sourceName").value,
+          old_text: document.getElementById("oldText").value,
+          new_text: document.getElementById("newText").value,
+          source_authority: 0.95
+        });
+        setAnalysis(result);
+      } catch (e) {
+        alert(e.message);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function renderFindingGroup(title, stateLabel, items, tone) {
+      const body = items.length
+        ? items.map(item => `
+            <div class="finding">
+              <div class="find-state ${tone}">${escapeHtml(stateLabel)}</div>
+              <div class="find-path">${escapeHtml(`${item.file}:${item.line}`)}</div>
+              <div class="find-term">${escapeHtml(item.matched_term)}</div>
+              <div class="find-line">${escapeHtml(item.text)}</div>
+            </div>
+          `).join("")
+        : `<div class="finding"><div class="tiny">No entries.</div></div>`;
+      return `<div class="finding-group"><h3>${escapeHtml(title)}</h3>${body}</div>`;
+    }
+
+    function renderFindings(matches) {
+      const grouped = {stale: [], current: [], unrelated: []};
+      for (const match of matches) grouped[classifyMatch(match)].push(match);
+      return [
+        renderFindingGroup("Stale References", "STALE", grouped.stale, "stale"),
+        renderFindingGroup("Current References", "CURRENT", grouped.current, "current"),
+        renderFindingGroup("Unrelated Matches", "UNRELATED", grouped.unrelated, "neutral")
+      ].join("");
+    }
+
+    async function scanRepo() {
+      if (!analysis) return alert("Analyze the change first.");
+      setBusy(true);
+      try {
+        scan = await post("/api/scan", {
+          repo_path: document.getElementById("repoPath").value,
+          change: analysis.change
+        });
+        document.getElementById("scanSection").classList.remove("hidden");
+        document.getElementById("scanMetrics").innerHTML =
+          metric("Blast Radius", `${staleFileCount()} files`) +
+          metric("Stale References", staleMatches().length) +
+          metric("Adjusted Score", scan.adjusted_score) +
+          metric("Decision", formatDecision(scan.decision), true);
+        document.getElementById("scanOutput").innerHTML = renderFindings(scan.matches);
+        setStageStatus("stage2Status", "Affected code found", staleMatches().length ? "warn" : "success");
+        updateSummary();
+      } catch (e) {
+        alert(e.message);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function renderEvaluationRow(item, index, totalRuns, resultsMap) {
+      const result = resultsMap.get(item.id);
+      const status = result ? (result.passed ? "PASS" : "FAIL") : "NOT RUN";
+      const statusClass = result ? (result.passed ? "pass" : "fail") : "pending";
+      const output = result ? escapeHtml(result.output || "") : "No output yet.";
+      const expected = item.required_substrings.join(", ") || "none";
+      const observed = result
+        ? (result.found_forbidden.join(", ") || result.output.slice(0, 100) || "none")
+        : "pending";
+      const progressClass = result && !result.passed ? "meter fail" : "meter";
+      const width = result ? Math.max(4, result.pass_rate * 100) : 4;
+
+      return `
+        <div class="eval-row">
+          <div class="eval-top">
+            <div>
+              <div class="eval-id">EVAL-${String(index + 1).padStart(3, "0")}</div>
+              <strong>${escapeHtml(item.name)}</strong>
+            </div>
+            <div class="eval-state ${statusClass}">${escapeHtml(status)}</div>
+          </div>
+          <div>${escapeHtml(item.prompt)}</div>
+          <div class="${progressClass}"><span style="width:${width}%"></span></div>
+          <div class="eval-columns">
+            <div class="eval-box">
+              <strong>Expected</strong>
+              <div>${escapeHtml(expected)}</div>
+            </div>
+            <div class="eval-box">
+              <strong>Observed</strong>
+              <div>${escapeHtml(observed)}</div>
+            </div>
+          </div>
+          <pre>${output}</pre>
+          <div class="eval-meta">
+            Trials ${result ? `${result.passed_runs}/${result.total_runs}` : totalRuns}
+            | Pass rate ${result ? result.pass_rate : 0}
+            | Wilson ${result ? `${result.wilson_low}-${result.wilson_high}` : "n/a"}
+            | Brier ${result ? result.brier_score : "n/a"}
+            | Missing ${result ? (result.missing_required.join(", ") || "none") : (item.required_substrings.join(", ") || "none")}
+            | Judge ${result ? (result.judge_passed === null ? "not run" : (result.judge_passed ? "pass" : "fail")) : "not run"}
+            ${result && result.error ? `| ${escapeHtml(result.error)}` : ""}
+          </div>
+        </div>
+      `;
+    }
+
+    async function generateEvals() {
+      if (!analysis) return alert("Analyze the change first.");
+      setBusy(true);
+      try {
+        const result = await post("/api/generate-evals", {
+          change: analysis.change,
+          matches: scan ? scan.matches : [],
+          count: 3
+        });
+        evaluations = result.evaluations;
+        runResults = null;
+        repairState = null;
+        document.getElementById("evalSection").classList.remove("hidden");
+        document.getElementById("evalMetrics").innerHTML =
+          metric("Agent State", "Stale", true) +
+          metric("Evaluations", `0 / ${evaluations.length} passing`) +
+          metric("Failure Confidence", "0%") +
+          metric("Generator", result.used_model ? "GPT-5.6" : "Fallback", true);
+        document.getElementById("evalOutput").innerHTML = evaluations.map((item, index) =>
+          renderEvaluationRow(item, index, Number(document.getElementById("runsPerEval").value), new Map())
+        ).join("");
+        setStageStatus("stage3Status", "Evaluations ready");
+        updateSummary();
+      } catch (e) {
+        alert(e.message);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function runEvals() {
+      if (!evaluations.length) return alert("Generate evaluations first.");
+      setBusy(true);
+      try {
+        runResults = await post("/api/run-evals", {
+          repo_path: document.getElementById("repoPath").value,
+          agent_script: document.getElementById("agentScript").value,
+          evaluations: evaluations,
+          change: analysis ? analysis.change : null,
+          timeout_seconds: 15,
+          runs_per_eval: Number(document.getElementById("runsPerEval").value)
+        });
+        document.getElementById("evalSection").classList.remove("hidden");
+        document.getElementById("evalMetrics").innerHTML =
+          metric("Agent State", runResults.passed === runResults.results.length ? "Current" : "Stale", true) +
+          metric("Evaluations", `${runResults.passed} / ${runResults.results.length} passing`) +
+          metric("Failure Confidence", `${Math.round(runResults.pass_rate * 100)}%`) +
+          metric("Avg Brier", runResults.average_brier_score);
+        const resultsMap = new Map(runResults.results.map(result => [result.evaluation_id, result]));
+        document.getElementById("evalOutput").innerHTML = evaluations.map((item, index) =>
+          renderEvaluationRow(item, index, Number(document.getElementById("runsPerEval").value), resultsMap)
+        ).join("");
+        setStageStatus("stage3Status", runResults.passed === runResults.results.length ? "Passing" : "Failure confirmed", runResults.passed === runResults.results.length ? "success" : "fail");
+        updateSummary();
+      } catch (e) {
+        alert(e.message);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function repair(runCodex) {
+      if (!analysis || !runResults) return alert("Analyze and run evaluations first.");
+      setBusy(true);
+      try {
+        const result = await post("/api/repair", {
+          repo_path: document.getElementById("repoPath").value,
+          change: analysis.change,
+          failures: runResults.results,
+          matches: scan ? scan.matches : [],
+          run_codex: runCodex
+        });
+        repairState = result;
+        document.getElementById("repairMeta").textContent = `${result.status.toUpperCase()} | ${result.git_diff ? `${result.git_diff.length} chars` : "No patch generated"}`;
+        document.getElementById("repairDiff").textContent = result.git_diff || "NO PATCH GENERATED";
+        document.getElementById("repairOutput").textContent = `STATUS: ${result.status}\n${result.message}\n\nRUN OUTPUT\n${result.codex_output || "No additional output."}`;
+        setStageStatus("stage4Status", result.status === "patched" ? "Patch generated" : result.status, result.status === "patched" ? "warn" : "");
+        updateSummary();
+      } catch (e) {
+        alert(e.message);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function resetSample() {
+      setBusy(true);
+      try {
+        await post("/api/reset-sample", {});
+        repairState = null;
+        runResults = null;
+        evaluations = [];
+        document.getElementById("evalSection").classList.add("hidden");
+        document.getElementById("repairMeta").textContent = "Demo reset";
+        document.getElementById("repairDiff").textContent = "NO PATCH GENERATED";
+        document.getElementById("repairOutput").textContent = "Sample agent reset.";
+        document.getElementById("verificationOutput").textContent = "No verification yet.";
+        document.getElementById("verifiedSummary").classList.add("hidden");
+        setStageStatus("stage3Status", "Waiting");
+        setStageStatus("stage4Status", "Waiting");
+        setStageStatus("stage5Status", "Waiting");
+        updateSummary();
+        alert("Sample agent reset.");
+      } catch (e) {
+        alert(e.message);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function formatDiff(lines) {
+      if (!lines.length) return "No diff yet.";
+      return lines.join("\n");
+    }
+
+    function shortHash(value) {
+      let hash = 0;
+      for (let i = 0; i < value.length; i += 1) {
+        hash = ((hash << 5) - hash) + value.charCodeAt(i);
+        hash |= 0;
+      }
+      return Math.abs(hash).toString(16).slice(0, 7) || "0000000";
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]));
+    }
+
+    updateSummary();
+    updateVerificationSummary();
+    loadAppConfig();
+  </script>
 </body>
 </html>
