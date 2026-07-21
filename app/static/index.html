@@ -1114,12 +1114,14 @@
     let evaluations = [];
     let runResults = null;
     let repairState = null;
+    let fastDemoMode = false;
 
     async function loadAppConfig() {
       try {
         const response = await fetch("/api/config");
         const data = await response.json();
         if (data.fast_demo) {
+          fastDemoMode = true;
           document.getElementById("fastDemoBadge").classList.remove("hidden");
           const runsInput = document.getElementById("runsPerEval");
           if (runsInput) runsInput.value = 1;
@@ -1529,10 +1531,11 @@
       if (!analysis) return alert("Analyze the change first.");
       setBusy(true);
       try {
+        const evalCount = fastDemoMode ? 1 : 3;
         const result = await post("/api/generate-evals", {
           change: analysis.change,
           matches: scan ? scan.matches : [],
-          count: 3
+          count: evalCount
         });
         evaluations = result.evaluations;
         runResults = null;
